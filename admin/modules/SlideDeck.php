@@ -10,33 +10,33 @@ class SlideDeck {
         $db = Database::getInstance()->getPDO();
 
         $db->exec("CREATE TABLE IF NOT EXISTS slide_decks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            slug TEXT UNIQUE NOT NULL,
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            title VARCHAR(255) NOT NULL,
+            slug VARCHAR(190) NOT NULL UNIQUE,
             description TEXT,
-            status TEXT DEFAULT 'draft',
-            created_by INTEGER NOT NULL,
+            status VARCHAR(30) DEFAULT 'draft',
+            created_by INT UNSIGNED NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             published_at DATETIME,
             FOREIGN KEY (created_by) REFERENCES users(id)
-        )");
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
         $db->exec("CREATE TABLE IF NOT EXISTS slide_items (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            deck_id INTEGER NOT NULL,
-            title TEXT,
-            content TEXT,
-            image TEXT,
-            order_num INTEGER DEFAULT 0,
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            deck_id INT UNSIGNED NOT NULL,
+            title VARCHAR(255),
+            content LONGTEXT,
+            image VARCHAR(500),
+            order_num INT DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             FOREIGN KEY (deck_id) REFERENCES slide_decks(id) ON DELETE CASCADE
-        )");
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-        @$db->exec("CREATE INDEX IF NOT EXISTS idx_slide_decks_slug ON slide_decks(slug)");
-        @$db->exec("CREATE INDEX IF NOT EXISTS idx_slide_decks_status ON slide_decks(status)");
-        @$db->exec("CREATE INDEX IF NOT EXISTS idx_slide_items_deck ON slide_items(deck_id)");
+        $database = Database::getInstance();
+        $database->createIndexIfMissing('slide_decks', 'idx_slide_decks_status', '`status`');
+        $database->createIndexIfMissing('slide_items', 'idx_slide_items_deck', '`deck_id`');
     }
 
     public static function getList($filters = []) {

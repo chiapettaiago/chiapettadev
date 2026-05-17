@@ -10,17 +10,18 @@ class SiteAccess {
         $db = Database::getInstance()->getPDO();
 
         $db->exec("CREATE TABLE IF NOT EXISTS site_accesses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            path TEXT NOT NULL,
-            title TEXT,
-            referrer TEXT,
-            user_agent TEXT,
-            ip_hash TEXT,
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            path VARCHAR(500) NOT NULL,
+            title VARCHAR(255),
+            referrer VARCHAR(500),
+            user_agent VARCHAR(500),
+            ip_hash CHAR(64),
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )");
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-        @$db->exec("CREATE INDEX IF NOT EXISTS idx_site_accesses_created_at ON site_accesses(created_at)");
-        @$db->exec("CREATE INDEX IF NOT EXISTS idx_site_accesses_path ON site_accesses(path)");
+        $database = Database::getInstance();
+        $database->createIndexIfMissing('site_accesses', 'idx_site_accesses_created_at', '`created_at`');
+        $database->createIndexIfMissing('site_accesses', 'idx_site_accesses_path', '`path`');
     }
 
     public static function trackPublicPage($title = null) {
@@ -135,7 +136,7 @@ class SiteAccess {
             return null;
         }
 
-        return hash('sha256', $ip . '|' . DB_PATH);
+        return hash('sha256', $ip . '|' . DB_HOST . '|' . DB_NAME);
     }
 
     private static function periodRange($period) {

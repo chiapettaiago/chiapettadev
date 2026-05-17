@@ -17,26 +17,27 @@ class SiteItem {
         $db = Database::getInstance()->getPDO();
 
         $db->exec("CREATE TABLE IF NOT EXISTS site_items (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            section TEXT NOT NULL,
-            title TEXT NOT NULL,
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            section VARCHAR(40) NOT NULL,
+            title VARCHAR(255) NOT NULL,
             description TEXT,
-            image TEXT,
-            icon TEXT,
+            image VARCHAR(500),
+            icon VARCHAR(80),
             tags TEXT,
-            primary_label TEXT,
-            primary_url TEXT,
-            secondary_label TEXT,
-            secondary_url TEXT,
-            status TEXT DEFAULT 'published',
-            order_num INTEGER DEFAULT 0,
+            primary_label VARCHAR(120),
+            primary_url VARCHAR(500),
+            secondary_label VARCHAR(120),
+            secondary_url VARCHAR(500),
+            status VARCHAR(30) DEFAULT 'published',
+            order_num INT DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )");
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-        @$db->exec("CREATE INDEX IF NOT EXISTS idx_site_items_section ON site_items(section)");
-        @$db->exec("CREATE INDEX IF NOT EXISTS idx_site_items_status ON site_items(status)");
-        @$db->exec("CREATE INDEX IF NOT EXISTS idx_site_items_order ON site_items(order_num)");
+        $database = Database::getInstance();
+        $database->createIndexIfMissing('site_items', 'idx_site_items_section', '`section`');
+        $database->createIndexIfMissing('site_items', 'idx_site_items_status', '`status`');
+        $database->createIndexIfMissing('site_items', 'idx_site_items_order', '`order_num`');
 
         self::seedExistingItems();
         self::seedNavigationItems();

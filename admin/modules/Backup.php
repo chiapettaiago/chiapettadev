@@ -13,24 +13,24 @@ class Backup {
         $db = Database::getInstance()->getPDO();
 
         $db->exec("CREATE TABLE IF NOT EXISTS backup_runs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            filename TEXT NOT NULL,
-            filepath TEXT NOT NULL,
-            file_size INTEGER DEFAULT 0,
-            status TEXT DEFAULT 'local',
-            drive_file_id TEXT,
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            filename VARCHAR(255) NOT NULL,
+            filepath VARCHAR(500) NOT NULL,
+            file_size BIGINT UNSIGNED DEFAULT 0,
+            status VARCHAR(40) DEFAULT 'local',
+            drive_file_id VARCHAR(255),
             message TEXT,
-            created_by INTEGER NOT NULL,
+            created_by INT UNSIGNED NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (created_by) REFERENCES users(id)
-        )");
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-        @$db->exec("CREATE INDEX IF NOT EXISTS idx_backup_runs_created_at ON backup_runs(created_at)");
+        Database::getInstance()->createIndexIfMissing('backup_runs', 'idx_backup_runs_created_at', '`created_at`');
     }
 
     public static function getSettings() {
         self::ensureSchema();
-        $settings = Database::getInstance()->select('settings', "key IN ('google_drive_folder_id', 'google_drive_service_account')");
+        $settings = Database::getInstance()->select('settings', "`key` IN ('google_drive_folder_id', 'google_drive_service_account')");
         $indexed = [
             'google_drive_folder_id' => '',
             'google_drive_service_account' => ''
@@ -67,7 +67,7 @@ class Backup {
                 return ['success' => false, 'message' => 'ZipArchive não está disponível no servidor'];
             }
 
-            $database = self::ensureDatabaseWritable();
+            $database = self::ensureDatabaseAvailable();
             if (!$database['success']) {
                 return $database;
             }
@@ -85,7 +85,7 @@ class Backup {
                 return ['success' => false, 'message' => 'Não foi possível criar o arquivo ZIP'];
             }
 
-            self::addFile($zip, __DIR__ . '/../../db/cms.db', 'db/cms.db');
+            $zip->addFromString('db/cms.sql', self::exportDatabaseSql());
             self::addDirectory($zip, __DIR__ . '/../../images', 'images');
             self::addDirectory($zip, __DIR__ . '/../../admin/uploads', 'admin/uploads');
             self::addDirectory($zip, __DIR__ . '/../../blog', 'blog');
@@ -100,7 +100,8 @@ class Backup {
                 'site' => $_SERVER['HTTP_HOST'] ?? 'neverland.chiapetta.dev',
                 'cms_backup_version' => self::VERSION,
                 'php_version' => PHP_VERSION,
-                'database' => 'db/cms.db'
+                'database' => DB_NAME,
+                'database_dump' => 'db/cms.sql'
             ];
             $zip->addFromString('backup-manifest.json', json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
             if (!$zip->close()) {
@@ -270,13 +271,10 @@ class Backup {
                 }
             }
 
-            $dbSource = $tempDir . '/db/cms.db';
+            $dbSource = $tempDir . '/db/cms.sql';
             if (is_file($dbSource)) {
-                if (!is_dir($root . '/db')) {
-                    mkdir($root . '/db', 0755, true);
-                }
-                copy($dbSource, $root . '/db/cms.db');
-                self::registerPreRestoreBackup($root . '/db/cms.db', $preRestore, $userId);
+                self::importDatabaseSql(file_get_contents($dbSource));
+                self::registerPreRestoreBackup($preRestore, $userId);
             }
 
             self::removeDirectory($tempDir);
@@ -315,19 +313,13 @@ class Backup {
         return ['success' => true];
     }
 
-    private static function ensureDatabaseWritable() {
-        if (!is_file(DB_PATH)) {
-            return ['success' => false, 'message' => 'Banco de dados não encontrado'];
+    private static function ensureDatabaseAvailable() {
+        try {
+            Database::getInstance()->query('SELECT 1');
+            return ['success' => true];
+        } catch (Exception $e) {
+            return ['success' => false, 'message' => 'Banco MySQL indisponível: ' . $e->getMessage()];
         }
-
-        @chmod(dirname(DB_PATH), 0777);
-        @chmod(DB_PATH, 0666);
-
-        if (!is_writable(dirname(DB_PATH)) || !is_writable(DB_PATH)) {
-            return ['success' => false, 'message' => 'O banco SQLite está somente leitura para o PHP. Ajuste as permissões de db/ e db/cms.db'];
-        }
-
-        return ['success' => true];
     }
 
     private static function addDirectory($zip, $path, $localPrefix) {
@@ -352,11 +344,11 @@ class Backup {
     }
 
     private static function validateRestoreZip($zip) {
-        if ($zip->locateName('backup-manifest.json') === false || $zip->locateName('db/cms.db') === false) {
+        if ($zip->locateName('backup-manifest.json') === false || $zip->locateName('db/cms.sql') === false) {
             return ['success' => false, 'message' => 'Este ZIP não parece ser um backup válido deste CMS'];
         }
 
-        $allowedFiles = ['backup-manifest.json', 'db/cms.db', 'index.php', 'CMS_README.md'];
+        $allowedFiles = ['backup-manifest.json', 'db/cms.sql', 'index.php', 'CMS_README.md'];
         $allowedPrefixes = ['images/', 'admin/uploads/', 'blog/', 'slides/', 'templates/', 'js/'];
 
         for ($i = 0; $i < $zip->numFiles; $i++) {
@@ -435,36 +427,143 @@ class Backup {
         rmdir($path);
     }
 
-    private static function registerPreRestoreBackup($dbPath, $preRestore, $userId) {
+    private static function exportDatabaseSql() {
+        $pdo = Database::getInstance()->getPDO();
+        $tables = [
+            'users',
+            'posts',
+            'pages',
+            'images',
+            'tags',
+            'post_tags',
+            'categories',
+            'post_categories',
+            'settings',
+            'site_items',
+            'site_accesses',
+            'comments',
+            'slide_decks',
+            'slide_items',
+            'backup_runs'
+        ];
+
+        $sql = "-- ChiapettaDev MySQL backup\n";
+        $sql .= "-- Created at: " . date('c') . "\n";
+        $sql .= "SET FOREIGN_KEY_CHECKS=0;\n";
+        $sql .= "SET NAMES utf8mb4;\n\n";
+
+        foreach (array_reverse($tables) as $table) {
+            $sql .= "DROP TABLE IF EXISTS `{$table}`;\n";
+        }
+
+        $sql .= "\n";
+
+        foreach ($tables as $table) {
+            if (!Database::getInstance()->tableExists($table)) {
+                continue;
+            }
+
+            $create = $pdo->query("SHOW CREATE TABLE `{$table}`")->fetch(PDO::FETCH_ASSOC);
+            $createSql = $create['Create Table'] ?? array_values($create)[1] ?? '';
+            $sql .= $createSql . ";\n\n";
+
+            $rows = $pdo->query("SELECT * FROM `{$table}`")->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $row) {
+                $columns = array_map(fn($column) => '`' . str_replace('`', '``', $column) . '`', array_keys($row));
+                $values = array_map(function($value) use ($pdo) {
+                    return $value === null ? 'NULL' : $pdo->quote((string) $value);
+                }, array_values($row));
+
+                $sql .= "INSERT INTO `{$table}` (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $values) . ");\n";
+            }
+
+            $sql .= "\n";
+        }
+
+        $sql .= "SET FOREIGN_KEY_CHECKS=1;\n";
+
+        return $sql;
+    }
+
+    private static function importDatabaseSql($sql) {
+        if (trim($sql) === '') {
+            throw new Exception('Dump SQL vazio');
+        }
+
+        $pdo = Database::getInstance()->getPDO();
+        $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
+
+        try {
+            foreach (self::splitSqlStatements($sql) as $statement) {
+                $statement = trim($statement);
+                if ($statement === '' || str_starts_with($statement, '--')) {
+                    continue;
+                }
+
+                $pdo->exec($statement);
+            }
+        } finally {
+            $pdo->exec('SET FOREIGN_KEY_CHECKS=1');
+        }
+    }
+
+    private static function splitSqlStatements($sql) {
+        $statements = [];
+        $buffer = '';
+        $quote = null;
+        $length = strlen($sql);
+
+        for ($i = 0; $i < $length; $i++) {
+            $char = $sql[$i];
+            $next = $sql[$i + 1] ?? '';
+
+            if ($quote === null && $char === '-' && $next === '-') {
+                while ($i < $length && $sql[$i] !== "\n") {
+                    $i++;
+                }
+                continue;
+            }
+
+            if (($char === "'" || $char === '"' || $char === '`') && ($i === 0 || $sql[$i - 1] !== '\\')) {
+                if ($quote === null) {
+                    $quote = $char;
+                } elseif ($quote === $char) {
+                    $quote = null;
+                }
+            }
+
+            if ($char === ';' && $quote === null) {
+                $statements[] = $buffer;
+                $buffer = '';
+                continue;
+            }
+
+            $buffer .= $char;
+        }
+
+        if (trim($buffer) !== '') {
+            $statements[] = $buffer;
+        }
+
+        return $statements;
+    }
+
+    private static function registerPreRestoreBackup($preRestore, $userId) {
         if (empty($preRestore['filepath']) || !is_file($preRestore['filepath'])) {
             return;
         }
 
         try {
-            $pdo = new PDO('sqlite:' . $dbPath);
-            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-            $pdo->exec("CREATE TABLE IF NOT EXISTS backup_runs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                filename TEXT NOT NULL,
-                filepath TEXT NOT NULL,
-                file_size INTEGER DEFAULT 0,
-                status TEXT DEFAULT 'local',
-                drive_file_id TEXT,
-                message TEXT,
-                created_by INTEGER NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )");
-
-            $stmt = $pdo->prepare("INSERT INTO backup_runs (filename, filepath, file_size, status, drive_file_id, message, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([
-                basename($preRestore['filepath']),
-                $preRestore['filepath'],
-                filesize($preRestore['filepath']) ?: 0,
-                'local',
-                '',
-                'Backup automático criado antes da restauração',
-                $userId,
-                date('Y-m-d H:i:s')
+            self::ensureSchema();
+            Database::getInstance()->insert('backup_runs', [
+                'filename' => basename($preRestore['filepath']),
+                'filepath' => $preRestore['filepath'],
+                'file_size' => filesize($preRestore['filepath']) ?: 0,
+                'status' => 'local',
+                'drive_file_id' => '',
+                'message' => 'Backup automático criado antes da restauração',
+                'created_by' => $userId,
+                'created_at' => date('Y-m-d H:i:s')
             ]);
         } catch (Exception $e) {
             return;
@@ -593,9 +692,9 @@ class Backup {
     }
 
     private static function upsertSetting($key, $value) {
-        $existing = Database::getInstance()->selectOne('settings', "key = ?", [$key]);
+        $existing = Database::getInstance()->selectOne('settings', "`key` = ?", [$key]);
         if ($existing) {
-            Database::getInstance()->update('settings', ['value' => $value, 'updated_at' => date('Y-m-d H:i:s')], "key = '" . str_replace("'", "''", $key) . "'");
+            Database::getInstance()->update('settings', ['value' => $value, 'updated_at' => date('Y-m-d H:i:s')], "`key` = '" . str_replace("'", "''", $key) . "'");
             return;
         }
 

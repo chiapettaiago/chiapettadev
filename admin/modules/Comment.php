@@ -10,19 +10,20 @@ class Comment {
         $db = Database::getInstance()->getPDO();
 
         $db->exec("CREATE TABLE IF NOT EXISTS comments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            post_slug TEXT NOT NULL,
-            user_id INTEGER NOT NULL,
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            post_slug VARCHAR(190) NOT NULL,
+            user_id INT UNSIGNED NOT NULL,
             content TEXT NOT NULL,
-            status TEXT DEFAULT 'published',
+            status VARCHAR(30) DEFAULT 'published',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id)
-        )");
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-        @$db->exec("CREATE INDEX IF NOT EXISTS idx_comments_post_slug ON comments(post_slug)");
-        @$db->exec("CREATE INDEX IF NOT EXISTS idx_comments_status ON comments(status)");
-        @$db->exec("CREATE INDEX IF NOT EXISTS idx_comments_created_at ON comments(created_at)");
+        $database = Database::getInstance();
+        $database->createIndexIfMissing('comments', 'idx_comments_post_slug', '`post_slug`');
+        $database->createIndexIfMissing('comments', 'idx_comments_status', '`status`');
+        $database->createIndexIfMissing('comments', 'idx_comments_created_at', '`created_at`');
     }
 
     public static function create($postSlug, $userId, $content) {

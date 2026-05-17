@@ -1,6 +1,6 @@
 <?php
 /**
- * Inicialização do Banco de Dados - Criar tabelas
+ * Inicializacao do banco MySQL - criar tabelas e dados minimos.
  */
 
 require_once __DIR__ . '/config.php';
@@ -8,239 +8,223 @@ require_once __DIR__ . '/config.php';
 $db = Database::getInstance()->getPDO();
 
 try {
-    // Tabela de Usuários
+    $db->exec("SET NAMES utf8mb4");
+    $db->exec("SET FOREIGN_KEY_CHECKS = 0");
+
     $db->exec("CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        full_name TEXT NOT NULL,
-        role TEXT DEFAULT 'editor',
-        status TEXT DEFAULT 'active',
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(80) NOT NULL UNIQUE,
+        email VARCHAR(190) NOT NULL UNIQUE,
+        password VARCHAR(255) NOT NULL,
+        full_name VARCHAR(190) NOT NULL,
+        role VARCHAR(30) DEFAULT 'editor',
+        status VARCHAR(30) DEFAULT 'active',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )");
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Tabela de Posts (Blog)
     $db->exec("CREATE TABLE IF NOT EXISTS posts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        slug TEXT UNIQUE NOT NULL,
-        content TEXT NOT NULL,
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        slug VARCHAR(190) NOT NULL UNIQUE,
+        content LONGTEXT NOT NULL,
         excerpt TEXT,
-        featured_image TEXT,
-        author_id INTEGER NOT NULL,
-        status TEXT DEFAULT 'draft',
-        views INTEGER DEFAULT 0,
+        featured_image VARCHAR(500),
+        author_id INT UNSIGNED NOT NULL,
+        status VARCHAR(30) DEFAULT 'draft',
+        views INT UNSIGNED DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        published_at DATETIME,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        published_at DATETIME NULL,
         FOREIGN KEY (author_id) REFERENCES users(id)
-    )");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Tabela de Páginas
     $db->exec("CREATE TABLE IF NOT EXISTS pages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        slug TEXT UNIQUE NOT NULL,
-        content TEXT NOT NULL,
-        featured_image TEXT,
-        author_id INTEGER NOT NULL,
-        status TEXT DEFAULT 'draft',
-        parent_id INTEGER,
-        order_num INTEGER DEFAULT 0,
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        slug VARCHAR(190) NOT NULL UNIQUE,
+        content LONGTEXT NOT NULL,
+        featured_image VARCHAR(500),
+        author_id INT UNSIGNED NOT NULL,
+        status VARCHAR(30) DEFAULT 'draft',
+        parent_id INT UNSIGNED NULL,
+        order_num INT DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        published_at DATETIME,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        published_at DATETIME NULL,
         FOREIGN KEY (author_id) REFERENCES users(id),
         FOREIGN KEY (parent_id) REFERENCES pages(id)
-    )");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Tabela de Imagens
     $db->exec("CREATE TABLE IF NOT EXISTS images (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        filename TEXT NOT NULL,
-        filepath TEXT NOT NULL,
-        mime_type TEXT,
-        file_size INTEGER,
-        uploaded_by INTEGER NOT NULL,
-        alt_text TEXT,
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        filename VARCHAR(255) NOT NULL,
+        filepath VARCHAR(500) NOT NULL,
+        mime_type VARCHAR(120),
+        file_size BIGINT UNSIGNED,
+        uploaded_by INT UNSIGNED NOT NULL,
+        alt_text VARCHAR(255),
         description TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (uploaded_by) REFERENCES users(id)
-    )");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Tabela de Tags
     $db->exec("CREATE TABLE IF NOT EXISTS tags (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE NOT NULL,
-        slug TEXT UNIQUE NOT NULL,
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(120) NOT NULL UNIQUE,
+        slug VARCHAR(160) NOT NULL UNIQUE,
         description TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Tabela de Relacionamento entre Posts e Tags
     $db->exec("CREATE TABLE IF NOT EXISTS post_tags (
-        post_id INTEGER NOT NULL,
-        tag_id INTEGER NOT NULL,
+        post_id INT UNSIGNED NOT NULL,
+        tag_id INT UNSIGNED NOT NULL,
         PRIMARY KEY (post_id, tag_id),
         FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
         FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
-    )");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Tabela de Categorias
     $db->exec("CREATE TABLE IF NOT EXISTS categories (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE NOT NULL,
-        slug TEXT UNIQUE NOT NULL,
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(120) NOT NULL UNIQUE,
+        slug VARCHAR(160) NOT NULL UNIQUE,
         description TEXT,
-        parent_id INTEGER,
+        parent_id INT UNSIGNED NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (parent_id) REFERENCES categories(id)
-    )");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Tabela de Relacionamento entre Posts e Categorias
     $db->exec("CREATE TABLE IF NOT EXISTS post_categories (
-        post_id INTEGER NOT NULL,
-        category_id INTEGER NOT NULL,
+        post_id INT UNSIGNED NOT NULL,
+        category_id INT UNSIGNED NOT NULL,
         PRIMARY KEY (post_id, category_id),
         FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
         FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
-    )");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Tabela de Configurações
     $db->exec("CREATE TABLE IF NOT EXISTS settings (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        key TEXT UNIQUE NOT NULL,
-        value TEXT,
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        `key` VARCHAR(190) NOT NULL UNIQUE,
+        value LONGTEXT,
         description TEXT,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )");
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Tabela de Itens do Site (habilidades, projetos e destaques do blog)
     $db->exec("CREATE TABLE IF NOT EXISTS site_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        section TEXT NOT NULL,
-        title TEXT NOT NULL,
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        section VARCHAR(40) NOT NULL,
+        title VARCHAR(255) NOT NULL,
         description TEXT,
-        image TEXT,
-        icon TEXT,
+        image VARCHAR(500),
+        icon VARCHAR(80),
         tags TEXT,
-        primary_label TEXT,
-        primary_url TEXT,
-        secondary_label TEXT,
-        secondary_url TEXT,
-        status TEXT DEFAULT 'published',
-        order_num INTEGER DEFAULT 0,
+        primary_label VARCHAR(120),
+        primary_url VARCHAR(500),
+        secondary_label VARCHAR(120),
+        secondary_url VARCHAR(500),
+        status VARCHAR(30) DEFAULT 'published',
+        order_num INT DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )");
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Tabela de acessos às páginas públicas
     $db->exec("CREATE TABLE IF NOT EXISTS site_accesses (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        path TEXT NOT NULL,
-        title TEXT,
-        referrer TEXT,
-        user_agent TEXT,
-        ip_hash TEXT,
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        path VARCHAR(500) NOT NULL,
+        title VARCHAR(255),
+        referrer VARCHAR(500),
+        user_agent VARCHAR(500),
+        ip_hash CHAR(64),
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Tabela de comentários dos leitores
     $db->exec("CREATE TABLE IF NOT EXISTS comments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        post_slug TEXT NOT NULL,
-        user_id INTEGER NOT NULL,
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        post_slug VARCHAR(190) NOT NULL,
+        user_id INT UNSIGNED NOT NULL,
         content TEXT NOT NULL,
-        status TEXT DEFAULT 'published',
+        status VARCHAR(30) DEFAULT 'published',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id)
-    )");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Tabelas de apresentações de slides
     $db->exec("CREATE TABLE IF NOT EXISTS slide_decks (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        slug TEXT UNIQUE NOT NULL,
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        slug VARCHAR(190) NOT NULL UNIQUE,
         description TEXT,
-        status TEXT DEFAULT 'draft',
-        created_by INTEGER NOT NULL,
+        status VARCHAR(30) DEFAULT 'draft',
+        created_by INT UNSIGNED NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        published_at DATETIME,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        published_at DATETIME NULL,
         FOREIGN KEY (created_by) REFERENCES users(id)
-    )");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
     $db->exec("CREATE TABLE IF NOT EXISTS slide_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        deck_id INTEGER NOT NULL,
-        title TEXT,
-        content TEXT,
-        image TEXT,
-        order_num INTEGER DEFAULT 0,
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        deck_id INT UNSIGNED NOT NULL,
+        title VARCHAR(255),
+        content LONGTEXT,
+        image VARCHAR(500),
+        order_num INT DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         FOREIGN KEY (deck_id) REFERENCES slide_decks(id) ON DELETE CASCADE
-    )");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Tabela de backups do site
     $db->exec("CREATE TABLE IF NOT EXISTS backup_runs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        filename TEXT NOT NULL,
-        filepath TEXT NOT NULL,
-        file_size INTEGER DEFAULT 0,
-        status TEXT DEFAULT 'local',
-        drive_file_id TEXT,
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        filename VARCHAR(255) NOT NULL,
+        filepath VARCHAR(500) NOT NULL,
+        file_size BIGINT UNSIGNED DEFAULT 0,
+        status VARCHAR(40) DEFAULT 'local',
+        drive_file_id VARCHAR(255),
         message TEXT,
-        created_by INTEGER NOT NULL,
+        created_by INT UNSIGNED NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (created_by) REFERENCES users(id)
-    )");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Criar usuário admin padrão (senha: admin123)
-    $existingAdmin = Database::getInstance()->selectOne('users', "username = 'admin'");
-    
+    $db->exec("SET FOREIGN_KEY_CHECKS = 1");
+
+    $existingAdmin = Database::getInstance()->selectOne('users', "username = ?", ['admin']);
     if (!$existingAdmin) {
-        $adminPassword = password_hash('admin123', PASSWORD_BCRYPT);
         Database::getInstance()->insert('users', [
             'username' => 'admin',
             'email' => 'admin@chiapetta.dev',
-            'password' => $adminPassword,
+            'password' => password_hash('admin123', PASSWORD_BCRYPT),
             'full_name' => 'Administrador',
             'role' => 'admin',
             'status' => 'active'
         ]);
-        
-        echo "✓ Banco de dados inicializado com sucesso!<br>";
-        echo "✓ Usuário admin criado (usuário: admin, senha: admin123)<br>";
-        echo "⚠️ IMPORTANTE: Altere a senha do admin após o primeiro login!<br>";
     }
 
-    // Criar índices para melhor performance
-    @$db->exec("CREATE INDEX IF NOT EXISTS idx_posts_slug ON posts(slug)");
-    @$db->exec("CREATE INDEX IF NOT EXISTS idx_posts_status ON posts(status)");
-    @$db->exec("CREATE INDEX IF NOT EXISTS idx_posts_author ON posts(author_id)");
-    @$db->exec("CREATE INDEX IF NOT EXISTS idx_pages_slug ON pages(slug)");
-    @$db->exec("CREATE INDEX IF NOT EXISTS idx_pages_status ON pages(status)");
-    @$db->exec("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)");
-    @$db->exec("CREATE INDEX IF NOT EXISTS idx_site_items_section ON site_items(section)");
-    @$db->exec("CREATE INDEX IF NOT EXISTS idx_site_items_status ON site_items(status)");
-    @$db->exec("CREATE INDEX IF NOT EXISTS idx_site_items_order ON site_items(order_num)");
-    @$db->exec("CREATE INDEX IF NOT EXISTS idx_site_accesses_created_at ON site_accesses(created_at)");
-    @$db->exec("CREATE INDEX IF NOT EXISTS idx_site_accesses_path ON site_accesses(path)");
-    @$db->exec("CREATE INDEX IF NOT EXISTS idx_comments_post_slug ON comments(post_slug)");
-    @$db->exec("CREATE INDEX IF NOT EXISTS idx_comments_status ON comments(status)");
-    @$db->exec("CREATE INDEX IF NOT EXISTS idx_comments_created_at ON comments(created_at)");
-    @$db->exec("CREATE INDEX IF NOT EXISTS idx_slide_decks_slug ON slide_decks(slug)");
-    @$db->exec("CREATE INDEX IF NOT EXISTS idx_slide_decks_status ON slide_decks(status)");
-    @$db->exec("CREATE INDEX IF NOT EXISTS idx_slide_items_deck ON slide_items(deck_id)");
-    @$db->exec("CREATE INDEX IF NOT EXISTS idx_backup_runs_created_at ON backup_runs(created_at)");
-
+    $database = Database::getInstance();
+    $database->createIndexIfMissing('posts', 'idx_posts_status', '`status`');
+    $database->createIndexIfMissing('posts', 'idx_posts_author', '`author_id`');
+    $database->createIndexIfMissing('pages', 'idx_pages_status', '`status`');
+    $database->createIndexIfMissing('site_items', 'idx_site_items_section', '`section`');
+    $database->createIndexIfMissing('site_items', 'idx_site_items_status', '`status`');
+    $database->createIndexIfMissing('site_items', 'idx_site_items_order', '`order_num`');
+    $database->createIndexIfMissing('site_accesses', 'idx_site_accesses_created_at', '`created_at`');
+    $database->createIndexIfMissing('site_accesses', 'idx_site_accesses_path', '`path`');
+    $database->createIndexIfMissing('comments', 'idx_comments_post_slug', '`post_slug`');
+    $database->createIndexIfMissing('comments', 'idx_comments_status', '`status`');
+    $database->createIndexIfMissing('comments', 'idx_comments_created_at', '`created_at`');
+    $database->createIndexIfMissing('slide_decks', 'idx_slide_decks_status', '`status`');
+    $database->createIndexIfMissing('slide_items', 'idx_slide_items_deck', '`deck_id`');
+    $database->createIndexIfMissing('backup_runs', 'idx_backup_runs_created_at', '`created_at`');
 } catch (Exception $e) {
-    echo "Erro ao inicializar banco de dados: " . $e->getMessage();
+    try {
+        $db->exec("SET FOREIGN_KEY_CHECKS = 1");
+    } catch (Exception $ignored) {
+    }
+
+    echo "Erro ao inicializar banco de dados MySQL: " . $e->getMessage();
     exit;
 }
 ?>

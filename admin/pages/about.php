@@ -38,9 +38,14 @@ function about_format_bytes($bytes) {
 }
 
 $cmsVersion = '1.3.0';
-$dbFile = DB_PATH;
-$dbSize = file_exists($dbFile) ? about_format_bytes(filesize($dbFile)) : 'Indisponível';
-$sqliteVersion = Database::getInstance()->getPDO()->query('SELECT sqlite_version()')->fetchColumn();
+$mysqlVersion = Database::getInstance()->getPDO()->query('SELECT VERSION()')->fetchColumn();
+$dbSize = Database::getInstance()
+    ->query(
+        "SELECT COALESCE(SUM(data_length + index_length), 0)
+         FROM information_schema.tables
+         WHERE table_schema = DATABASE()"
+    )
+    ->fetchColumn();
 
 $stats = [
     ['label' => 'Posts', 'value' => about_count_table('posts'), 'icon' => 'fas fa-file-alt'],
@@ -65,8 +70,8 @@ $modules = [
 $systemInfo = [
     'Versão do CMS' => $cmsVersion,
     'PHP' => PHP_VERSION,
-    'Banco de dados' => strtoupper(DB_TYPE) . ' / SQLite ' . $sqliteVersion,
-    'Tamanho do banco' => $dbSize,
+    'Banco de dados' => strtoupper(DB_TYPE) . ' / MySQL ' . $mysqlVersion,
+    'Tamanho do banco' => about_format_bytes($dbSize),
     'Servidor' => $_SERVER['SERVER_SOFTWARE'] ?? 'Indisponível',
     'Timezone' => date_default_timezone_get(),
     'Ambiente' => __DIR__ . '/../..',

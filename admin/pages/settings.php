@@ -41,11 +41,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         ];
 
         foreach ($settings as $key => $value) {
-            $existing = Database::getInstance()->selectOne('settings', "key = '$key'");
+            $existing = Database::getInstance()->selectOne('settings', "`key` = ?", [$key]);
             if ($existing) {
                 Database::getInstance()->update('settings', 
                     ['value' => $value, 'updated_at' => date('Y-m-d H:i:s')],
-                    "key = '$key'"
+                    "`key` = '" . str_replace("'", "''", $key) . "'"
                 );
             } else {
                 Database::getInstance()->insert('settings', [
@@ -398,7 +398,7 @@ foreach ($settings as $s) {
                 </div>
                 <div>
                     <p style="color: var(--text-muted); margin-bottom: 0.25rem;">Banco de Dados</p>
-                    <p style="font-weight: 600;">SQLite</p>
+                    <p style="font-weight: 600;">MySQL</p>
                 </div>
                 <div>
                     <p style="color: var(--text-muted); margin-bottom: 0.25rem;">Seu Usuário</p>
