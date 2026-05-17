@@ -434,7 +434,7 @@ $images = Image::getList(['limit' => 100]);
 
         <!-- Upload Section -->
         <div class="upload-section" id="uploadSection" ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
-            <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelect(event)">
+            <input type="file" id="fileInput" name="image" accept="image/*" form="uploadForm" onchange="handleFileSelect(event)">
             <div class="upload-icon">
                 <i class="fas fa-cloud-upload-alt"></i>
             </div>
@@ -444,8 +444,6 @@ $images = Image::getList(['limit' => 100]);
 
         <!-- Upload Form -->
         <form method="POST" enctype="multipart/form-data" id="uploadForm" style="display: none;">
-            <input type="hidden" id="fileInputHidden" name="image" required>
-            
             <div style="background: var(--secondary); border: 1px solid rgba(0, 217, 163, 0.1); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem;">
                 <div class="form-group">
                     <label>Visualização</label>
@@ -563,7 +561,6 @@ $images = Image::getList(['limit' => 100]);
         const uploadSection = document.getElementById('uploadSection');
         const fileInput = document.getElementById('fileInput');
         const uploadForm = document.getElementById('uploadForm');
-        const fileInputHidden = document.getElementById('fileInputHidden');
         const preview = document.getElementById('preview');
 
         uploadSection.addEventListener('click', () => fileInput.click());
@@ -582,7 +579,10 @@ $images = Image::getList(['limit' => 100]);
             uploadSection.classList.remove('dragover');
             const files = e.dataTransfer.files;
             if (files.length > 0) {
-                handleFileSelect({ target: { files: files } });
+                const transfer = new DataTransfer();
+                transfer.items.add(files[0]);
+                fileInput.files = transfer.files;
+                handleFileSelect({ target: fileInput });
             }
         }
 
@@ -606,7 +606,6 @@ $images = Image::getList(['limit' => 100]);
             const reader = new FileReader();
             reader.onload = (e) => {
                 preview.src = e.target.result;
-                fileInputHidden.files = new DataTransfer().items.add(file).files;
                 uploadForm.style.display = 'block';
                 uploadSection.style.display = 'none';
                 document.getElementById('title').focus();

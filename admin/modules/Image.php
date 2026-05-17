@@ -34,7 +34,13 @@ class Image {
 
             // Criar diretório se não existir
             if (!is_dir(UPLOADS_PATH)) {
-                mkdir(UPLOADS_PATH, 0755, true);
+                if (!mkdir(UPLOADS_PATH, 0755, true)) {
+                    return ['success' => false, 'message' => 'Não foi possível criar a pasta de uploads'];
+                }
+            }
+
+            if (!is_writable(UPLOADS_PATH)) {
+                return ['success' => false, 'message' => 'A pasta de uploads não tem permissão de escrita para o PHP'];
             }
 
             // Mover arquivo
@@ -89,10 +95,8 @@ class Image {
             return ['success' => false, 'message' => $errors[$file['error']] ?? 'Erro desconhecido'];
         }
 
-        // Validar tipo MIME
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        $mimeType = finfo_file($finfo, $file['tmp_name']);
-        finfo_close($finfo);
+        // Validar tipo MIME com fallback para servidores sem extensão fileinfo.
+        $mimeType = self::detectMimeType($file);
 
         if (!in_array($mimeType, self::ALLOWED_TYPES)) {
             return ['success' => false, 'message' => 'Tipo de arquivo não permitido. Use: JPG, PNG, GIF, WEBP'];
@@ -105,6 +109,37 @@ class Image {
         }
 
         return ['success' => true];
+    }
+
+    /**
+     * Detectar MIME sem depender exclusivamente da extensão fileinfo.
+     */
+    private static function detectMimeType($file) {
+        if (function_exists('finfo_open')) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            if ($finfo) {
+                $mimeType = finfo_file($finfo, $file['tmp_name']);
+                finfo_close($finfo);
+
+                if ($mimeType) {
+                    return $mimeType;
+                }
+            }
+        }
+
+        if (function_exists('mime_content_type')) {
+            $mimeType = mime_content_type($file['tmp_name']);
+            if ($mimeType) {
+                return $mimeType;
+            }
+        }
+
+        $imageInfo = @getimagesize($file['tmp_name']);
+        if (!empty($imageInfo['mime'])) {
+            return $imageInfo['mime'];
+        }
+
+        return $file['type'] ?? '';
     }
 
     /**
