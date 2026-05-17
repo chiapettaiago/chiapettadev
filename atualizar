@@ -1,0 +1,10 @@
+#!/bin/bash
+
+echo "Atualizando repositórios..."
+sudo apt-get update > /dev/null
+
+echo "Atualizando pacotes..."
+sudo apt-get upgrade -y > /dev/null
+
+echo "Atualizando sistema..."
+sudo apt dist-upgrade -y > /dev/null
