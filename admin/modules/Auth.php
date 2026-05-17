@@ -266,6 +266,66 @@ class Auth {
             return ['success' => false, 'message' => 'Erro ao criar usuário: ' . $e->getMessage()];
         }
     }
+
+    /**
+     * Excluir usuário (apenas admin)
+     */
+    public static function deleteUser($userId) {
+        try {
+            if (!self::hasPermission('admin')) {
+                return ['success' => false, 'message' => 'Permissão negada'];
+            }
+
+            $userId = intval($userId);
+            $currentUser = self::getCurrentUser();
+            $currentUserId = intval($currentUser['id'] ?? 0);
+
+            if ($userId <= 0) {
+                return ['success' => false, 'message' => 'Usuário inválido'];
+            }
+
+            if ($userId === $currentUserId) {
+                return ['success' => false, 'message' => 'Você não pode excluir sua própria conta'];
+            }
+
+            $targetUser = Database::getInstance()->selectOne('users', "id = ?", [$userId]);
+            if (!$targetUser) {
+                return ['success' => false, 'message' => 'Usuário não encontrado'];
+            }
+
+            if (($targetUser['role'] ?? '') === 'admin') {
+                $adminCount = (int) Database::getInstance()
+                    ->query("SELECT COUNT(*) FROM users WHERE role = 'admin' AND status = 'active'")
+                    ->fetchColumn();
+
+                if ($adminCount <= 1) {
+                    return ['success' => false, 'message' => 'Não é possível excluir o último administrador ativo'];
+                }
+            }
+
+            $pdo = Database::getInstance()->getPDO();
+            $pdo->beginTransaction();
+
+            try {
+                Database::getInstance()->update('posts', ['author_id' => $currentUserId], "author_id = $userId");
+                Database::getInstance()->update('pages', ['author_id' => $currentUserId], "author_id = $userId");
+                Database::getInstance()->update('images', ['uploaded_by' => $currentUserId], "uploaded_by = $userId");
+                Database::getInstance()->update('slide_decks', ['created_by' => $currentUserId], "created_by = $userId");
+                Database::getInstance()->update('backup_runs', ['created_by' => $currentUserId], "created_by = $userId");
+                Database::getInstance()->delete('comments', "user_id = $userId");
+                Database::getInstance()->delete('users', "id = $userId");
+
+                $pdo->commit();
+            } catch (Exception $e) {
+                $pdo->rollBack();
+                throw $e;
+            }
+
+            return ['success' => true, 'message' => 'Usuário excluído com sucesso'];
+        } catch (Exception $e) {
+            return ['success' => false, 'message' => 'Erro ao excluir usuário: ' . $e->getMessage()];
+        }
+    }
 }
 
 // Inicializar sessão

@@ -35,6 +35,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message = $result['message'] ?? (is_array($result['messages'] ?? null) ? implode(', ', $result['messages']) : '');
                 $messageType = 'danger';
             }
+        } elseif ($_POST['action'] === 'delete') {
+            $result = Auth::deleteUser($_POST['user_id'] ?? 0);
+
+            if ($result['success']) {
+                $message = $result['message'];
+                $messageType = 'success';
+            } else {
+                $message = $result['message'] ?? 'Erro ao excluir usuário';
+                $messageType = 'danger';
+            }
         }
     }
 }
@@ -152,6 +162,28 @@ $users = Database::getInstance()->select('users', "1=1 ORDER BY created_at DESC"
 
         .btn-submit:hover {
             background: #00b885;
+        }
+
+        .btn-small {
+            border: none;
+            border-radius: 6px;
+            padding: 0.45rem 0.7rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        .btn-delete {
+            background: var(--danger);
+            color: #fff;
+        }
+
+        .btn-delete:hover {
+            background: #bb2d3b;
         }
 
         .users-section {
@@ -336,6 +368,7 @@ $users = Database::getInstance()->select('users', "1=1 ORDER BY created_at DESC"
                                 <th>Email</th>
                                 <th>Papel</th>
                                 <th>Status</th>
+                                <th>Ações</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -343,8 +376,21 @@ $users = Database::getInstance()->select('users', "1=1 ORDER BY created_at DESC"
                                 <tr>
                                     <td><strong><?= htmlspecialchars($u['full_name']) ?></strong></td>
                                     <td><?= htmlspecialchars($u['email']) ?></td>
-                                    <td><span class="badge badge-<?= $u['role'] ?>"><?= ucfirst($u['role']) ?></span></td>
-                                    <td><span class="badge badge-<?= $u['status'] ?>"><?= ucfirst($u['status']) ?></span></td>
+                                    <td><span class="badge badge-<?= htmlspecialchars($u['role']) ?>"><?= ucfirst(htmlspecialchars($u['role'])) ?></span></td>
+                                    <td><span class="badge badge-<?= htmlspecialchars($u['status']) ?>"><?= ucfirst(htmlspecialchars($u['status'])) ?></span></td>
+                                    <td>
+                                        <?php if (intval($u['id']) !== intval($user['id'])): ?>
+                                            <form method="POST" style="display: inline;" onsubmit="return confirm('Tem certeza que deseja excluir este usuário? O conteúdo criado por ele será transferido para sua conta.');">
+                                                <input type="hidden" name="action" value="delete">
+                                                <input type="hidden" name="user_id" value="<?= intval($u['id']) ?>">
+                                                <button type="submit" class="btn-small btn-delete">
+                                                    <i class="fas fa-trash"></i> Excluir
+                                                </button>
+                                            </form>
+                                        <?php else: ?>
+                                            <span style="color: var(--text-muted); font-size: 0.85rem;">Sua conta</span>
+                                        <?php endif; ?>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
