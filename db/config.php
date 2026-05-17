@@ -4,10 +4,10 @@
  */
 
 define('DB_TYPE', 'mysql');
-define('DB_HOST', '127.0.0.1');
-define('DB_USER', 'neverland');
-define('DB_PASS', 'EbATDwkiNkwxHjhJ');
-define('DB_NAME', 'neverland');
+define('DB_HOST', '159.203.188.0');
+define('DB_USER', 'chiapettadev');
+define('DB_PASS', 'tZ3enMSb53NDCrtB');
+define('DB_NAME', 'chiapettadev');
 
 define('ADMIN_PATH', '/admin/');
 define('UPLOADS_PATH', __DIR__ . '/../admin/uploads/');
