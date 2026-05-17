@@ -1,4 +1,4 @@
-# ChiapettaDev Neverland
+# ChiapettaDev
 
 Site pessoal, blog e CMS sob medida em PHP, com painel administrativo, autenticação de leitores, comentários, métricas simples, gerenciamento de conteúdo, slides e backups.
 
