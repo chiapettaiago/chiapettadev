@@ -1040,7 +1040,7 @@ if (!$editId && !$isNew) {
                 <i class="fas fa-arrow-left"></i>Voltar à Lista de Páginas
             </a>
         </div>
-        <script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/7/tinymce.min.js" referrerpolicy="origin"></script>
+        <script src="https://cdn.tiny.cloud/1/vzv83v6j3ph3tx55wbjhbuz9i0qsr8mhfhigw0k0kq9qqyhr/tinymce/8/tinymce.min.js" referrerpolicy="origin" crossorigin="anonymous"></script>
         <script>
             const pageForm = document.querySelector('form');
             const contentField = document.getElementById('content');
@@ -1071,7 +1071,7 @@ if (!$editId && !$isNew) {
                 toolbar_mode: 'sliding',
                 branding: false,
                 promotion: false,
-                language: 'pt_BR',
+                language: 'pt-BR',
                 skin: 'oxide-dark',
                 content_css: 'dark',
                 automatic_uploads: false,
