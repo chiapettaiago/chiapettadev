@@ -28,6 +28,8 @@ if (!function_exists('footer_link_target')) {
                         <li style="margin-bottom: 0.5rem;"><a href="#habilidades" style="color: var(--text-muted); text-decoration: none; transition: color 0.3s;">Habilidades</a></li>
                         <li style="margin-bottom: 0.5rem;"><a href="#projetos" style="color: var(--text-muted); text-decoration: none; transition: color 0.3s;">Projetos</a></li>
                         <li style="margin-bottom: 0.5rem;"><a href="#blog" style="color: var(--text-muted); text-decoration: none; transition: color 0.3s;">Blog</a></li>
+                        <li style="margin-bottom: 0.5rem;"><a href="/privacidade/" style="color: var(--text-muted); text-decoration: none; transition: color 0.3s;">Privacidade</a></li>
+                        <li style="margin-bottom: 0.5rem;"><a href="/termos/" style="color: var(--text-muted); text-decoration: none; transition: color 0.3s;">Termos</a></li>
                     </ul>
                 </div>
 

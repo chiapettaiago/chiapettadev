@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /backups/
+Disallow: /db/
+Disallow: /functions/
+Disallow: /templates/
+Disallow: /login.php
+Disallow: /admin/login.php
+
+Sitemap: https://neverland.chiapetta.dev/sitemap.xml
+Sitemap: https://neverland.chiapetta.dev/sitemap.php

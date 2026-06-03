@@ -4,6 +4,14 @@ require_once __DIR__ . '/admin/modules/SiteItem.php';
 $skills = SiteItem::getPublishedBySection('skill');
 $projects = SiteItem::getPublishedBySection('project');
 $blogHighlights = SiteItem::getPublishedBySection('blog', 3);
+$siteBaseUrl = (((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && intval($_SERVER['SERVER_PORT']) === 443)) ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+$pageTitle = 'ChiapettaDev - Desenvolvedor Full Stack';
+$metaDescription = 'Portfólio e blog de Iago Filgueiras Chiapetta, com projetos, artigos sobre desenvolvimento web, Python e Linux.';
+$metaKeywords = 'desenvolvedor full stack, Python, Linux, desenvolvimento web, portfólio, blog de tecnologia';
+$metaImage = $siteBaseUrl . '/images/profile.jpg';
+$metaCanonical = $siteBaseUrl . '/';
+$metaUrl = $metaCanonical;
+$metaOgTitle = $pageTitle;
 
 function render_tags($tags) {
     $tagList = array_filter(array_map('trim', explode(',', $tags ?? '')));

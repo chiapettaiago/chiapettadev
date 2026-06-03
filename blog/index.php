@@ -2,6 +2,14 @@
 require_once __DIR__ . '/../admin/modules/SiteItem.php';
 
 $blogPosts = SiteItem::getPublishedBySection('blog');
+$siteBaseUrl = (((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && intval($_SERVER['SERVER_PORT']) === 443)) ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+$pageTitle = 'Blog | ChiapettaDev';
+$metaDescription = 'Artigos e reflexões de Iago Filgueiras Chiapetta sobre desenvolvimento web, tecnologia, carreira e inteligência artificial.';
+$metaKeywords = 'blog de tecnologia, desenvolvimento web, Python, IA, carreira de desenvolvedor';
+$metaImage = $siteBaseUrl . '/images/perplexity-ai.webp';
+$metaCanonical = $siteBaseUrl . '/blog/';
+$metaUrl = $metaCanonical;
+$metaOgTitle = $pageTitle;
 
 function render_blog_tags($tags) {
     $tagList = array_filter(array_map('trim', explode(',', $tags ?? '')));

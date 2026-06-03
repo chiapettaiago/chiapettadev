@@ -2,6 +2,13 @@
 require_once __DIR__ . '/../admin/modules/SlideDeck.php';
 
 $pageTitle = 'Slides | ChiapettaDev';
+$siteBaseUrl = (((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && intval($_SERVER['SERVER_PORT']) === 443)) ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+$metaDescription = 'Apresentações navegáveis e conteúdos visuais publicados no site ChiapettaDev.';
+$metaKeywords = 'slides, apresentações, tecnologia, desenvolvimento web';
+$metaImage = $siteBaseUrl . '/images/favicon-apple.jpg';
+$metaCanonical = $siteBaseUrl . '/slides/';
+$metaUrl = $metaCanonical;
+$metaOgTitle = $pageTitle;
 $decks = SlideDeck::getList(['status' => 'published']);
 ?>
 <?php include __DIR__ . '/../templates/header.php'; ?>

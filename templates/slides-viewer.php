@@ -12,6 +12,14 @@ if (!$deck || $deck['status'] !== 'published') {
 
 $slides = $deck['slides'] ?? [];
 $pageTitle = $deck['title'] . ' | ChiapettaDev';
+$siteBaseUrl = (((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && intval($_SERVER['SERVER_PORT']) === 443)) ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+$metaDescription = $deck['description'] ?? 'Apresentação navegável publicada no site ChiapettaDev.';
+$metaKeywords = 'slides, apresentação, tecnologia, desenvolvimento';
+$metaImage = !empty($slides[0]['image']) ? (preg_match('/^https?:\/\//i', $slides[0]['image']) ? $slides[0]['image'] : $siteBaseUrl . $slides[0]['image']) : $siteBaseUrl . '/images/favicon-apple.jpg';
+$metaCanonical = $siteBaseUrl . SlideDeck::publicUrl($deck['slug']);
+$metaUrl = $metaCanonical;
+$metaType = 'article';
+$metaOgTitle = $pageTitle;
 ?>
 <?php include __DIR__ . '/header.php'; ?>
 

@@ -59,12 +59,45 @@ if (!function_exists('header_nav_href')) {
         return $url;
     }
 }
+
+if (!function_exists('header_site_base_url')) {
+    function header_site_base_url() {
+        $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || (isset($_SERVER['SERVER_PORT']) && intval($_SERVER['SERVER_PORT']) === 443);
+
+        return ($https ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    }
+}
+
+if (!function_exists('header_canonical_url')) {
+    function header_canonical_url() {
+        $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+        return header_site_base_url() . $path;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="<?= htmlspecialchars($metaDescription ?? 'Portfólio e blog de Iago Filgueiras Chiapetta, desenvolvedor full stack focado em Python, Linux e desenvolvimento web.') ?>">
+    <?php if (!empty($metaKeywords)): ?>
+        <meta name="keywords" content="<?= htmlspecialchars($metaKeywords) ?>">
+    <?php endif; ?>
+    <meta name="robots" content="<?= htmlspecialchars($metaRobots ?? 'index,follow') ?>">
+    <meta name="author" content="<?= htmlspecialchars($metaAuthor ?? 'Iago Filgueiras Chiapetta') ?>">
+    <link rel="canonical" href="<?= htmlspecialchars($metaCanonical ?? header_canonical_url()) ?>">
+    <meta property="og:site_name" content="ChiapettaDev">
+    <meta property="og:type" content="<?= htmlspecialchars($metaType ?? 'website') ?>">
+    <meta property="og:title" content="<?= htmlspecialchars($metaOgTitle ?? ($pageTitle ?? 'ChiapettaDev - Desenvolvedor Full Stack')) ?>">
+    <meta property="og:description" content="<?= htmlspecialchars($metaDescription ?? 'Portfólio e blog de Iago Filgueiras Chiapetta, desenvolvedor full stack focado em Python, Linux e desenvolvimento web.') ?>">
+    <meta property="og:url" content="<?= htmlspecialchars($metaUrl ?? header_canonical_url()) ?>">
+    <meta property="og:image" content="<?= htmlspecialchars($metaImage ?? header_site_base_url() . '/images/favicon-apple.jpg') ?>">
+    <meta name="twitter:card" content="<?= !empty($metaImage) ? 'summary_large_image' : 'summary' ?>">
+    <meta name="twitter:title" content="<?= htmlspecialchars($metaOgTitle ?? ($pageTitle ?? 'ChiapettaDev - Desenvolvedor Full Stack')) ?>">
+    <meta name="twitter:description" content="<?= htmlspecialchars($metaDescription ?? 'Portfólio e blog de Iago Filgueiras Chiapetta, desenvolvedor full stack focado em Python, Linux e desenvolvimento web.') ?>">
+    <meta name="twitter:image" content="<?= htmlspecialchars($metaImage ?? header_site_base_url() . '/images/favicon-apple.jpg') ?>">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="icon" href="/images/favicon-apple.jpg" type="image/jpeg">
     <link rel="apple-touch-icon" href="/images/favicon-apple.jpg">
