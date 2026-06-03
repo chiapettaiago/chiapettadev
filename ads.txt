@@ -1,3 +1,1 @@
-# Google AdSense authorization file
-# Replace the placeholder below with your real AdSense publisher ID.
-google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0
+google.com, pub-9305720517203277, DIRECT, f08c47fec0942fa0
