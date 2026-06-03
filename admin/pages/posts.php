@@ -21,6 +21,17 @@ $messageType = '';
 
 ExistingContentImporter::ensureImported();
 
+if (!function_exists('admin_format_datetime_local')) {
+    function admin_format_datetime_local($value) {
+        if (empty($value)) {
+            return '';
+        }
+
+        $timestamp = strtotime($value);
+        return $timestamp ? date('Y-m-d\TH:i', $timestamp) : '';
+    }
+}
+
 if (!function_exists('sync_blog_highlight_image')) {
     function sync_blog_highlight_image($postId) {
         $post = Post::getById($postId);
@@ -54,6 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'content' => $_POST['content'] ?? '',
                 'excerpt' => $_POST['excerpt'] ?? '',
                 'status' => $_POST['status'] ?? 'draft',
+                'published_at' => $_POST['published_at'] ?? '',
                 'featured_image' => $_POST['featured_image'] ?? '',
                 'tags' => $_POST['tags'] ?? '',
                 'categories' => $_POST['categories'] ?? ''
@@ -171,7 +183,7 @@ if (!$editId && !$isNew) {
         <title>Posts | CMS ChiapettaDev</title>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-        <link rel="icon" href="/images/favicon-apple.jpg" type="image/jpeg">
+    <link rel="icon" href="/images/favicon-apple.jpg" type="image/jpeg">
         <style>
             :root {
                 --primary: #1a1a1a;
@@ -941,204 +953,288 @@ if (!$editId && !$isNew) {
 </head>
     <body>
     <?php include __DIR__ . '/../partials/sidebar.php'; ?>
-    <div class="container">
-            <div class="header">
+    <div class="wp-editor-shell">
+        <div class="wp-editor-header">
+            <div>
                 <h1><?= $post ? 'Editar Post' : 'Novo Post' ?></h1>
+                <p class="wp-editor-note">Estrutura em duas colunas inspirada no editor clássico do WordPress.</p>
             </div>
-
-            <?php if (!empty($message)): ?>
-                <div class="alert alert-danger">
-                    <?= htmlspecialchars($message) ?>
-                </div>
-            <?php endif; ?>
-
-            <form method="POST" action="" enctype="multipart/form-data">
-                <input type="hidden" name="action" value="<?= $post ? 'update' : 'create' ?>">
-                <?php if ($post): ?>
-                    <input type="hidden" name="post_id" value="<?= $post['id'] ?>">
-                <?php endif; ?>
-
-                <div class="form-group">
-                    <label for="title">Título do Post *</label>
-                    <input 
-                        type="text" 
-                        id="title" 
-                        name="title" 
-                        value="<?= $post ? htmlspecialchars($post['title']) : '' ?>"
-                        placeholder="Digite o título do post"
-                        required
-                    >
-                    <div class="permalink-row">
-                        <span>Link:</span>
-                        <code>/blog/<span id="slugPreview"><?= $post ? htmlspecialchars($post['slug']) : 'novo-post' ?></span>/</code>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="slug">Slug</label>
-                    <input
-                        type="text"
-                        id="slug"
-                        name="slug"
-                        value="<?= $post ? htmlspecialchars($post['slug']) : '' ?>"
-                        placeholder="sera-gerado-a-partir-do-titulo"
-                    >
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="status">Status</label>
-                        <select id="status" name="status">
-                            <option value="draft" <?= (!$post || $post['status'] === 'draft') ? 'selected' : '' ?>>Rascunho</option>
-                            <option value="published" <?= ($post && $post['status'] === 'published') ? 'selected' : '' ?>>Publicado</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Imagem Destacada</label>
-                        <input type="hidden" id="featured_image" name="featured_image" value="<?= $post ? htmlspecialchars($post['featured_image'] ?? '') : '' ?>">
-                        <input type="hidden" id="featured_image_mode" name="featured_image_mode" value="library">
-                        <div class="featured-image-card">
-                            <div class="featured-image-preview" id="featuredImagePreview">
-                                <?php if ($post && !empty($post['featured_image'])): ?>
-                                    <img src="<?= htmlspecialchars($post['featured_image']) ?>" alt="<?= htmlspecialchars($post['title']) ?>">
-                                <?php else: ?>
-                                    <div class="featured-image-empty">
-                                        <i class="fas fa-image" style="font-size: 2rem; margin-bottom: 0.75rem;"></i>
-                                        <div>Nenhuma imagem destacada</div>
-                                    </div>
-                                <?php endif; ?>
-                            </div>
-                            <div class="featured-image-actions">
-                                <button type="button" class="btn-cancel" onclick="openMediaModal()">
-                                    <i class="fas fa-photo-film"></i>Definir imagem
-                                </button>
-                                <button type="button" class="btn-cancel" onclick="removeFeaturedImage()">
-                                    <i class="fas fa-trash"></i>Remover
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="excerpt">Resumo (Excerpt)</label>
-                    <textarea 
-                        id="excerpt" 
-                        name="excerpt" 
-                        placeholder="Resumo do post (será gerado automaticamente se deixado em branco)"
-                        style="min-height: 80px;"
-                    ><?= $post ? htmlspecialchars($post['excerpt']) : '' ?></textarea>
-                </div>
-
-                <div class="form-group">
-                    <label for="content">Conteúdo *</label>
-                    <textarea 
-                        id="content" 
-                        class="tinymce-editor"
-                        name="content" 
-                        required
-                    ><?= $post ? htmlspecialchars($post['content']) : '' ?></textarea>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="tags">Tags (separadas por vírgula)</label>
-                        <input 
-                            type="text" 
-                            id="tags" 
-                            name="tags" 
-                            placeholder="python, flask, web"
-                            value="<?= $post ? htmlspecialchars(implode(', ', array_map(function($t) { return $t['name']; }, $post['tags'] ?? []))) : '' ?>"
-                        >
-                    </div>
-
-                    <div class="form-group">
-                        <label for="categories">Categorias</label>
-                        <select id="categories" name="categories" multiple style="min-height: 80px;">
-                            <?php foreach ($categories as $cat): ?>
-                                <option value="<?= $cat['id'] ?>" <?= ($post && array_any($post['categories'] ?? [], fn($c) => $c['id'] == $cat['id'])) ? 'selected' : '' ?>>
-                                    <?= htmlspecialchars($cat['name']) ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="media-modal" id="mediaModal" aria-hidden="true">
-                    <div class="media-modal-content" role="dialog" aria-modal="true" aria-labelledby="mediaModalTitle">
-                        <div class="media-modal-header">
-                            <h2 class="media-modal-title" id="mediaModalTitle">Imagem destacada</h2>
-                            <button type="button" class="media-modal-close" onclick="closeMediaModal()" aria-label="Fechar">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        </div>
-
-                        <div class="media-tabs">
-                            <button type="button" class="media-tab active" data-panel="library" onclick="showMediaPanel('library')">
-                                Biblioteca
-                            </button>
-                            <button type="button" class="media-tab" data-panel="upload" onclick="showMediaPanel('upload')">
-                                Enviar nova
-                            </button>
-                        </div>
-
-                        <div class="media-panel active" id="mediaPanelLibrary">
-                            <?php if (!empty($images)): ?>
-                                <div class="media-grid">
-                                    <?php foreach ($images as $img): ?>
-                                        <button
-                                            type="button"
-                                            class="media-item"
-                                            data-src="<?= htmlspecialchars($img['filepath']) ?>"
-                                            data-title="<?= htmlspecialchars($img['title']) ?>"
-                                            onclick="selectLibraryImage(this)"
-                                        >
-                                            <img src="<?= htmlspecialchars($img['filepath']) ?>" alt="<?= htmlspecialchars($img['alt_text'] ?: $img['title']) ?>" loading="lazy">
-                                            <span title="<?= htmlspecialchars($img['title']) ?>"><?= htmlspecialchars($img['title']) ?></span>
-                                        </button>
-                                    <?php endforeach; ?>
-                                </div>
-                            <?php else: ?>
-                                <p style="color: var(--text-muted); margin: 0;">Nenhuma imagem enviada ainda.</p>
-                            <?php endif; ?>
-                        </div>
-
-                        <div class="media-panel" id="mediaPanelUpload">
-                            <div class="media-upload-box">
-                                <label for="featured_image_upload" style="margin-bottom: 0.75rem;">Escolha uma imagem do computador</label>
-                                <input type="file" id="featured_image_upload" name="featured_image_upload" accept="image/*" onchange="previewUploadedImage(event)">
-                                <div class="media-upload-preview" id="uploadPreview" style="display: none;"></div>
-                            </div>
-                        </div>
-
-                        <div class="media-modal-footer">
-                            <button type="button" class="btn-cancel" onclick="closeMediaModal()">Cancelar</button>
-                            <button type="button" class="btn-submit" onclick="applyMediaSelection()">
-                                <i class="fas fa-check"></i>Usar como destacada
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="button-group">
-                    <button type="submit" class="btn-submit">
-                        <i class="fas fa-save"></i><?= $post ? 'Atualizar Post' : 'Criar Post' ?>
-                    </button>
-                    <a href="/admin/pages/posts.php" class="btn-cancel">
-                        <i class="fas fa-times"></i>Cancelar
+            <div class="wp-editor-header-actions">
+                <a href="/admin/pages/posts.php" class="btn-cancel">
+                    <i class="fas fa-arrow-left"></i>Voltar
+                </a>
+                <?php if ($post && ($post['status'] ?? '') === 'published'): ?>
+                    <a href="/blog/<?= htmlspecialchars($post['slug']) ?>/" target="_blank" class="btn-primary">
+                        <i class="fas fa-eye"></i>Ver post
                     </a>
-                </div>
-            </form>
-
-            <a href="/admin/pages/posts.php" class="back-link" style="margin-top: 2rem;">
-                <i class="fas fa-arrow-left"></i>Voltar à Lista de Posts
-            </a>
+                <?php endif; ?>
+            </div>
         </div>
 
+        <?php if (!empty($message)): ?>
+            <div class="alert alert-<?= htmlspecialchars($messageType ?: 'danger') ?>">
+                <?= htmlspecialchars($message) ?>
+            </div>
+        <?php endif; ?>
+
+        <form method="POST" action="" enctype="multipart/form-data" id="postEditorForm">
+            <input type="hidden" name="action" value="<?= $post ? 'update' : 'create' ?>">
+            <?php if ($post): ?>
+                <input type="hidden" name="post_id" value="<?= $post['id'] ?>">
+            <?php endif; ?>
+
+            <div class="wp-editor-layout">
+                <div class="wp-editor-main">
+                    <section class="wp-metabox">
+                        <div class="wp-metabox-title">
+                            <h2>Título e link</h2>
+                        </div>
+                        <div class="wp-metabox-body">
+                            <div class="form-group">
+                                <label for="title">Título do Post *</label>
+                                <input
+                                    type="text"
+                                    id="title"
+                                    name="title"
+                                    class="wp-editor-title-input"
+                                    value="<?= $post ? htmlspecialchars($post['title']) : '' ?>"
+                                    placeholder="Digite o título do post"
+                                    required
+                                >
+                                <div class="wp-slug-row">
+                                    <span>Link permanente:</span>
+                                    <code>/blog/<span id="slugPreview"><?= $post ? htmlspecialchars($post['slug']) : 'novo-post' ?></span>/</code>
+                                </div>
+                            </div>
+
+                            <div class="form-group" style="margin-top: 1rem;">
+                                <label for="slug">Slug</label>
+                                <input
+                                    type="text"
+                                    id="slug"
+                                    name="slug"
+                                    value="<?= $post ? htmlspecialchars($post['slug']) : '' ?>"
+                                    placeholder="sera-gerado-a-partir-do-titulo"
+                                >
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="wp-metabox">
+                        <div class="wp-metabox-title">
+                            <h2>Conteúdo</h2>
+                        </div>
+                        <div class="wp-metabox-body">
+                            <div class="wp-editor-tabs" role="tablist" aria-label="Modo do editor">
+                                <button type="button" class="wp-editor-tab active" data-editor-mode="visual">Visual</button>
+                                <button type="button" class="wp-editor-tab" data-editor-mode="text">Texto</button>
+                            </div>
+                            <div class="form-group">
+                                <textarea
+                                    id="content"
+                                    class="tinymce-editor wp-editor-textarea"
+                                    name="content"
+                                    required
+                                ><?= $post ? htmlspecialchars($post['content']) : '' ?></textarea>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="wp-metabox">
+                        <div class="wp-metabox-title">
+                            <h2>Resumo</h2>
+                        </div>
+                        <div class="wp-metabox-body">
+                            <div class="form-group">
+                                <label for="excerpt">Excerpt</label>
+                                <textarea
+                                    id="excerpt"
+                                    name="excerpt"
+                                    placeholder="Resumo do post (será gerado automaticamente se deixado em branco)"
+                                    style="min-height: 110px;"
+                                ><?= $post ? htmlspecialchars($post['excerpt']) : '' ?></textarea>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <aside class="wp-editor-aside">
+                    <details class="wp-publish-box wp-metabox-collapsible" data-storage-key="admin-post-publish">
+                        <summary class="wp-metabox-title">
+                            <h2>Publicar</h2>
+                            <span class="wp-metabox-toggle"><i class="fas fa-chevron-up"></i></span>
+                        </summary>
+                        <div class="wp-publish-body">
+                            <div class="wp-publish-state">
+                                <div class="status-line">
+                                    <strong>Status</strong>
+                                    <span class="status-meta"><?= (($post['status'] ?? 'draft') === 'published') ? 'Publicado' : 'Rascunho' ?></span>
+                                </div>
+                                <div class="form-group">
+                                    <label for="status">Estado</label>
+                                    <select id="status" name="status">
+                                        <option value="draft" <?= (!$post || $post['status'] === 'draft') ? 'selected' : '' ?>>Rascunho</option>
+                                        <option value="published" <?= ($post && $post['status'] === 'published') ? 'selected' : '' ?>>Publicado</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="published_at">Publicar em</label>
+                                    <input
+                                        type="datetime-local"
+                                        id="published_at"
+                                        name="published_at"
+                                        value="<?= admin_format_datetime_local($post['published_at'] ?? ($post ? $post['created_at'] : date('Y-m-d H:i:s'))) ?>"
+                                    >
+                                </div>
+                                <div class="wp-editor-actions-row">
+                                    <button type="submit" class="btn-submit">
+                                        <i class="fas fa-save"></i><?= $post ? 'Atualizar' : 'Publicar' ?>
+                                    </button>
+                                    <a href="/admin/pages/posts.php" class="btn-cancel">
+                                        <i class="fas fa-times"></i>Cancelar
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+
+                    <details class="wp-metabox wp-metabox-collapsible" data-storage-key="admin-post-featured-image">
+                        <summary class="wp-metabox-title">
+                            <h2>Imagem destacada</h2>
+                            <span class="wp-metabox-toggle"><i class="fas fa-chevron-up"></i></span>
+                        </summary>
+                        <div class="wp-metabox-body">
+                            <input type="hidden" id="featured_image" name="featured_image" value="<?= $post ? htmlspecialchars($post['featured_image'] ?? '') : '' ?>">
+                            <input type="hidden" id="featured_image_mode" name="featured_image_mode" value="library">
+                            <div class="featured-image-card">
+                                <div class="featured-image-preview" id="featuredImagePreview">
+                                    <?php if ($post && !empty($post['featured_image'])): ?>
+                                        <img src="<?= htmlspecialchars($post['featured_image']) ?>" alt="<?= htmlspecialchars($post['title']) ?>">
+                                    <?php else: ?>
+                                        <div class="featured-image-empty">
+                                            <i class="fas fa-image" style="font-size: 2rem; margin-bottom: 0.75rem;"></i>
+                                            <div>Nenhuma imagem destacada</div>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="featured-image-actions">
+                                    <button type="button" class="btn-cancel" onclick="openMediaModal()">
+                                        <i class="fas fa-photo-film"></i>Definir imagem
+                                    </button>
+                                    <button type="button" class="btn-cancel" onclick="removeFeaturedImage()">
+                                        <i class="fas fa-trash"></i>Remover
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+
+                    <details class="wp-metabox wp-metabox-collapsible" data-storage-key="admin-post-tags">
+                        <summary class="wp-metabox-title">
+                            <h2>Tags</h2>
+                            <span class="wp-metabox-toggle"><i class="fas fa-chevron-up"></i></span>
+                        </summary>
+                        <div class="wp-metabox-body">
+                            <div class="form-group">
+                                <label for="tags">Tags separadas por vírgula</label>
+                                <input
+                                    type="text"
+                                    id="tags"
+                                    name="tags"
+                                    placeholder="python, flask, web"
+                                    value="<?= $post ? htmlspecialchars(implode(', ', array_map(function($t) { return $t['name']; }, $post['tags'] ?? []))) : '' ?>"
+                                >
+                            </div>
+                        </div>
+                    </details>
+
+                    <details class="wp-metabox wp-metabox-collapsible" data-storage-key="admin-post-categories">
+                        <summary class="wp-metabox-title">
+                            <h2>Categorias</h2>
+                            <span class="wp-metabox-toggle"><i class="fas fa-chevron-up"></i></span>
+                        </summary>
+                        <div class="wp-metabox-body">
+                            <div class="form-group">
+                                <label for="categories">Selecione uma ou mais categorias</label>
+                                <select id="categories" name="categories" multiple style="min-height: 140px;">
+                                    <?php foreach ($categories as $cat): ?>
+                                        <option value="<?= $cat['id'] ?>" <?= ($post && array_any($post['categories'] ?? [], fn($c) => $c['id'] == $cat['id'])) ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($cat['name']) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        </div>
+                    </details>
+                </aside>
+            </div>
+
+            <div class="media-modal" id="mediaModal" aria-hidden="true">
+                <div class="media-modal-content" role="dialog" aria-modal="true" aria-labelledby="mediaModalTitle">
+                    <div class="media-modal-header">
+                        <h2 class="media-modal-title" id="mediaModalTitle">Imagem destacada</h2>
+                        <button type="button" class="media-modal-close" onclick="closeMediaModal()" aria-label="Fechar">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+
+                    <div class="media-tabs">
+                        <button type="button" class="media-tab active" data-panel="library" onclick="showMediaPanel('library')">
+                            Biblioteca
+                        </button>
+                        <button type="button" class="media-tab" data-panel="upload" onclick="showMediaPanel('upload')">
+                            Enviar nova
+                        </button>
+                    </div>
+
+                    <div class="media-panel active" id="mediaPanelLibrary">
+                        <?php if (!empty($images)): ?>
+                            <div class="media-grid">
+                                <?php foreach ($images as $img): ?>
+                                    <button
+                                        type="button"
+                                        class="media-item"
+                                        data-src="<?= htmlspecialchars($img['filepath']) ?>"
+                                        data-title="<?= htmlspecialchars($img['title']) ?>"
+                                        onclick="selectLibraryImage(this)"
+                                    >
+                                        <img src="<?= htmlspecialchars($img['filepath']) ?>" alt="<?= htmlspecialchars($img['alt_text'] ?: $img['title']) ?>" loading="lazy">
+                                        <span title="<?= htmlspecialchars($img['title']) ?>"><?= htmlspecialchars($img['title']) ?></span>
+                                    </button>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php else: ?>
+                            <p style="color: var(--text-muted); margin: 0;">Nenhuma imagem enviada ainda.</p>
+                        <?php endif; ?>
+                    </div>
+
+                    <div class="media-panel" id="mediaPanelUpload">
+                        <div class="media-upload-box">
+                            <label for="featured_image_upload" style="margin-bottom: 0.75rem;">Escolha uma imagem do computador</label>
+                            <input type="file" id="featured_image_upload" name="featured_image_upload" accept="image/*" onchange="previewUploadedImage(event)">
+                            <div class="media-upload-preview" id="uploadPreview" style="display: none;"></div>
+                        </div>
+                    </div>
+
+                    <div class="media-modal-footer">
+                        <button type="button" class="btn-cancel" onclick="closeMediaModal()">Cancelar</button>
+                        <button type="button" class="btn-submit" onclick="applyMediaSelection()">
+                            <i class="fas fa-check"></i>Usar como destacada
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </form>
+
+        <a href="/admin/pages/posts.php" class="back-link" style="margin-top: 2rem;">
+            <i class="fas fa-arrow-left"></i>Voltar à Lista de Posts
+        </a>
+    </div>
+
         <script src="https://cdn.tiny.cloud/1/vzv83v6j3ph3tx55wbjhbuz9i0qsr8mhfhigw0k0kq9qqyhr/tinymce/8/tinymce.min.js" referrerpolicy="origin" crossorigin="anonymous"></script>
+        <script src="/admin/assets/tinymce-media.js?v=20260603"></script>
         <script>
-            const postForm = document.querySelector('form');
+            const postForm = document.getElementById('postEditorForm');
             const contentField = document.getElementById('content');
             const titleField = document.getElementById('title');
             const slugField = document.getElementById('slug');
@@ -1149,14 +1245,75 @@ if (!$editId && !$isNew) {
             const mediaModal = document.getElementById('mediaModal');
             const uploadInput = document.getElementById('featured_image_upload');
             const uploadPreview = document.getElementById('uploadPreview');
+            const editorTabs = document.querySelectorAll('.wp-editor-tab');
+            const metaboxes = document.querySelectorAll('.wp-metabox-collapsible');
             let pendingLibraryImage = featuredImageField.value;
             let pendingUploadSelected = false;
+            let currentEditorMode = 'visual';
+            let submittingAfterUpload = false;
             const contentImages = <?= json_encode(array_map(function($image) {
                 return [
                     'title' => $image['title'],
                     'url' => $image['filepath']
                 ];
             }, $images), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+
+            function setEditorMode(mode) {
+                currentEditorMode = mode;
+                const editor = typeof tinymce !== 'undefined' ? tinymce.get('content') : null;
+                const editorContainer = editor ? editor.getContainer() : null;
+                const showText = mode === 'text';
+
+                editorTabs.forEach(tab => {
+                    tab.classList.toggle('active', tab.dataset.editorMode === mode);
+                });
+
+                if (showText) {
+                    if (editor) {
+                        editor.save();
+                        if (editorContainer) {
+                            editorContainer.style.display = 'none';
+                        }
+                    }
+                    contentField.style.display = 'block';
+                    contentField.classList.add('wp-editor-textarea');
+                    return;
+                }
+
+                if (editor) {
+                    editor.setContent(contentField.value);
+                    if (editorContainer) {
+                        editorContainer.style.display = '';
+                    }
+                }
+                contentField.style.display = 'none';
+            }
+
+            editorTabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    setEditorMode(tab.dataset.editorMode || 'visual');
+                });
+            });
+
+            function initMetaboxStates() {
+                metaboxes.forEach(box => {
+                    const storageKey = box.dataset.storageKey;
+                    if (!storageKey) {
+                        return;
+                    }
+
+                    const storedState = localStorage.getItem(storageKey);
+                    if (storedState === 'open') {
+                        box.open = true;
+                    } else if (storedState === 'closed') {
+                        box.open = false;
+                    }
+
+                    box.addEventListener('toggle', function() {
+                        localStorage.setItem(storageKey, box.open ? 'open' : 'closed');
+                    });
+                });
+            }
 
             tinymce.init({
                 selector: '#content',
@@ -1170,51 +1327,29 @@ if (!$editId && !$isNew) {
                 language: 'pt-BR',
                 skin: 'oxide-dark',
                 content_css: 'dark',
-                automatic_uploads: false,
+                automatic_uploads: true,
                 relative_urls: false,
                 remove_script_host: false,
                 convert_urls: false,
+                images_upload_url: '/admin/ajax/tinymce-upload.php?type=image',
                 image_advtab: true,
-                file_picker_types: 'image',
+                file_picker_types: 'image media',
+                init_instance_callback: function() {
+                    setEditorMode('visual');
+                },
                 file_picker_callback: function(callback, value, meta) {
-                    if (meta.filetype !== 'image') {
+                    if (!window.CMSMediaTools) {
                         return;
                     }
 
-                    if (!contentImages.length) {
-                        const url = window.prompt('Cole a URL da imagem:');
-                        if (url) {
-                            callback(url);
-                        }
+                    if (meta.filetype === 'image') {
+                        window.CMSMediaTools.openPicker('image/*', 'image', callback, meta);
                         return;
                     }
 
-                    tinymce.activeEditor.windowManager.open({
-                        title: 'Selecionar imagem',
-                        body: {
-                            type: 'panel',
-                            items: [
-                                {
-                                    type: 'selectbox',
-                                    name: 'imageIndex',
-                                    label: 'Biblioteca de mídia',
-                                    items: contentImages.map(function(image, index) {
-                                        return { text: image.title, value: String(index) };
-                                    })
-                                }
-                            ]
-                        },
-                        buttons: [
-                            { type: 'cancel', text: 'Cancelar' },
-                            { type: 'submit', text: 'Inserir', primary: true }
-                        ],
-                        onSubmit: function(api) {
-                            const data = api.getData();
-                            const image = contentImages[Number(data.imageIndex)];
-                            api.close();
-                            callback(image.url, { alt: image.title, title: image.title });
-                        }
-                    });
+                    if (meta.filetype === 'media') {
+                        window.CMSMediaTools.openPicker('video/*', 'media', callback, meta);
+                    }
                 },
                 content_style: 'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 16px; line-height: 1.75; }'
             });
@@ -1362,6 +1497,7 @@ if (!$editId && !$isNew) {
                 updateSlugPreview();
             });
             updateSlugPreview();
+            initMetaboxStates();
 
             mediaModal.addEventListener('click', function(event) {
                 if (event.target === mediaModal) {
@@ -1376,12 +1512,19 @@ if (!$editId && !$isNew) {
             });
 
             postForm.addEventListener('submit', function(event) {
-                if (typeof tinymce !== 'undefined') {
+                if (submittingAfterUpload) {
+                    submittingAfterUpload = false;
+                    return;
+                }
+
+                if (typeof tinymce !== 'undefined' && currentEditorMode !== 'text') {
                     tinymce.triggerSave();
                 }
 
                 const editor = typeof tinymce !== 'undefined' ? tinymce.get('content') : null;
-                const plainText = editor ? editor.getContent({ format: 'text' }).trim() : contentField.value.trim();
+                const plainText = currentEditorMode === 'text'
+                    ? contentField.value.trim()
+                    : (editor ? editor.getContent({ format: 'text' }).trim() : contentField.value.trim());
 
                 if (!plainText) {
                     event.preventDefault();
@@ -1391,6 +1534,17 @@ if (!$editId && !$isNew) {
                         contentField.focus();
                     }
                     alert('Conteúdo é obrigatório');
+                    return;
+                }
+
+                if (currentEditorMode !== 'text' && editor && typeof editor.uploadImages === 'function') {
+                    event.preventDefault();
+                    editor.uploadImages().then(function() {
+                        submittingAfterUpload = true;
+                        postForm.requestSubmit ? postForm.requestSubmit() : postForm.submit();
+                    }).catch(function() {
+                        alert('Não foi possível enviar todas as imagens do conteúdo.');
+                    });
                 }
             });
         </script>

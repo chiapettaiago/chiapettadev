@@ -19,6 +19,17 @@ $messageType = '';
 
 SlideDeck::ensureSchema();
 
+if (!function_exists('admin_format_datetime_local')) {
+    function admin_format_datetime_local($value) {
+        if (empty($value)) {
+            return '';
+        }
+
+        $timestamp = strtotime($value);
+        return $timestamp ? date('Y-m-d\TH:i', $timestamp) : '';
+    }
+}
+
 function collect_slide_data() {
     $slides = [];
     $titles = $_POST['slide_title'] ?? [];
@@ -46,6 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             'slug' => $_POST['slug'] ?? '',
             'description' => $_POST['description'] ?? '',
             'status' => $_POST['status'] ?? 'draft',
+            'published_at' => $_POST['published_at'] ?? '',
             'slides' => collect_slide_data()
         ];
 
@@ -364,104 +376,159 @@ function slide_status_label($status) {
             </div>
         <?php endif; ?>
     <?php else: ?>
-        <form method="POST" class="form-card" id="slidesForm">
-            <input type="hidden" name="action" value="<?= $deck ? 'update' : 'create' ?>">
-            <?php if ($deck): ?>
-                <input type="hidden" name="deck_id" value="<?= intval($deck['id']) ?>">
+        <div class="wp-editor-shell">
+            <div class="wp-editor-header">
+                <div>
+                    <h1><?= $deck ? 'Editar apresentação' : 'Nova apresentação' ?></h1>
+                    <p class="wp-editor-note">Organização em formato de editor, com painel lateral de publicação.</p>
+                </div>
+                <div class="wp-editor-header-actions">
+                    <a href="/admin/pages/slides.php" class="btn-cancel">
+                        <i class="fas fa-arrow-left"></i>Voltar
+                    </a>
+                    <?php if ($deck): ?>
+                        <a href="<?= htmlspecialchars(SlideDeck::publicUrl($deck['slug'])) ?>" target="_blank" class="btn-primary">
+                            <i class="fas fa-eye"></i>Ver página
+                        </a>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <?php if ($message): ?>
+                <div class="alert alert-<?= htmlspecialchars($messageType) ?>"><?= $message ?></div>
             <?php endif; ?>
 
-            <div class="form-grid">
-                <div class="form-group full">
-                    <label for="title">Título da apresentação *</label>
-                    <input type="text" id="title" name="title" value="<?= htmlspecialchars($deck['title'] ?? '') ?>" required>
-                    <div class="permalink-row">
-                        <span>Link:</span>
-                        <code>/slides/<span id="slugPreview"><?= htmlspecialchars($deck['slug'] ?? 'nova-apresentacao') ?></span>/</code>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="slug">Slug</label>
-                    <input type="text" id="slug" name="slug" value="<?= htmlspecialchars($deck['slug'] ?? '') ?>" placeholder="nova-apresentacao">
-                </div>
-
-                <div class="form-group">
-                    <label for="status">Status</label>
-                    <select id="status" name="status">
-                        <option value="draft" <?= (($deck['status'] ?? 'draft') === 'draft') ? 'selected' : '' ?>>Rascunho</option>
-                        <option value="published" <?= (($deck['status'] ?? 'draft') === 'published') ? 'selected' : '' ?>>Publicado</option>
-                    </select>
-                </div>
-
-                <div class="form-group full">
-                    <label for="description">Descrição</label>
-                    <textarea id="description" name="description"><?= htmlspecialchars($deck['description'] ?? '') ?></textarea>
-                </div>
-            </div>
-
-            <div class="slides-heading">
-                <h2 style="margin: 0;">Slides</h2>
-                <button type="button" class="btn-cancel" onclick="addSlide()">
-                    <i class="fas fa-plus"></i>Adicionar slide
-                </button>
-            </div>
-
-            <div id="slidesList">
-                <?php foreach ($slides as $index => $slide): ?>
-                    <div class="slide-card">
-                        <div class="slide-card-header">
-                            <div class="slide-card-title">Slide <span class="slide-number"><?= $index + 1 ?></span></div>
-                            <button type="button" class="btn-small btn-delete" onclick="removeSlide(this)">
-                                <i class="fas fa-trash"></i>Remover
-                            </button>
-                        </div>
-
-                        <div class="slide-fields">
-                            <div class="form-group">
-                                <label>Título do slide</label>
-                                <input type="text" name="slide_title[]" value="<?= htmlspecialchars($slide['title'] ?? '') ?>">
-                            </div>
-                            <div class="form-group">
-                                <label>Ordem</label>
-                                <input type="number" name="slide_order[]" value="<?= intval($slide['order_num'] ?? (($index + 1) * 10)) ?>">
-                            </div>
-                            <div class="form-group">
-                                <label>Imagem</label>
-                                <select name="slide_image[]">
-                                    <option value="">Sem imagem</option>
-                                    <?php foreach ($images as $image): ?>
-                                        <option value="<?= htmlspecialchars($image['filepath']) ?>" <?= (($slide['image'] ?? '') === $image['filepath']) ? 'selected' : '' ?>>
-                                            <?= htmlspecialchars($image['title']) ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                    <?php if (!empty($slide['image']) && !array_filter($images, fn($img) => $img['filepath'] === $slide['image'])): ?>
-                                        <option value="<?= htmlspecialchars($slide['image']) ?>" selected><?= htmlspecialchars($slide['image']) ?></option>
-                                    <?php endif; ?>
-                                </select>
-                            </div>
-                            <div class="form-group slide-content-wrap">
-                                <label>Conteúdo</label>
-                                <textarea name="slide_content[]" class="slide-content"><?= htmlspecialchars($slide['content'] ?? '') ?></textarea>
-                            </div>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-
-            <div class="actions">
-                <a href="/admin/pages/slides.php" class="btn-cancel">
-                    <i class="fas fa-times"></i>Cancelar
-                </a>
+            <form method="POST" id="slidesForm">
+                <input type="hidden" name="action" value="<?= $deck ? 'update' : 'create' ?>">
                 <?php if ($deck): ?>
-                    <a href="<?= htmlspecialchars(SlideDeck::publicUrl($deck['slug'])) ?>" target="_blank" class="btn-cancel">
-                        <i class="fas fa-eye"></i>Ver página
-                    </a>
+                    <input type="hidden" name="deck_id" value="<?= intval($deck['id']) ?>">
                 <?php endif; ?>
-                <button type="submit" class="btn-submit">
-                    <i class="fas fa-save"></i>Salvar apresentação
-                </button>
-            </div>
-        </form>
+
+                <div class="wp-editor-layout">
+                    <div class="wp-editor-main">
+                        <section class="wp-metabox">
+                            <div class="wp-metabox-title">
+                                <h2>Título e link</h2>
+                            </div>
+                            <div class="wp-metabox-body">
+                                <div class="form-group">
+                                    <label for="title">Título da apresentação *</label>
+                                    <input type="text" id="title" name="title" class="wp-editor-title-input" value="<?= htmlspecialchars($deck['title'] ?? '') ?>" required>
+                                    <div class="wp-slug-row">
+                                        <span>Link permanente:</span>
+                                        <code>/slides/<span id="slugPreview"><?= htmlspecialchars($deck['slug'] ?? 'nova-apresentacao') ?></span>/</code>
+                                    </div>
+                                </div>
+
+                                <div class="form-group" style="margin-top: 1rem;">
+                                    <label for="slug">Slug</label>
+                                    <input type="text" id="slug" name="slug" value="<?= htmlspecialchars($deck['slug'] ?? '') ?>" placeholder="nova-apresentacao">
+                                </div>
+
+                                <div class="form-group" style="margin-top: 1rem;">
+                                    <label for="description">Descrição</label>
+                                    <textarea id="description" name="description"><?= htmlspecialchars($deck['description'] ?? '') ?></textarea>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="wp-metabox">
+                            <div class="wp-metabox-title">
+                                <h2>Slides</h2>
+                                <button type="button" class="btn-cancel" onclick="addSlide()">
+                                    <i class="fas fa-plus"></i>Adicionar slide
+                                </button>
+                            </div>
+                            <div class="wp-metabox-body">
+                                <div class="wp-slide-editor-shell" id="slidesList">
+                                    <?php foreach ($slides as $index => $slide): ?>
+                                        <div class="wp-slide-card">
+                                            <div class="wp-slide-card-header">
+                                                <div class="slide-card-title">Slide <span class="slide-number"><?= $index + 1 ?></span></div>
+                                                <button type="button" class="btn-small btn-delete" onclick="removeSlide(this)">
+                                                    <i class="fas fa-trash"></i>Remover
+                                                </button>
+                                            </div>
+                                            <div class="wp-slide-card-body">
+                                                <div class="slide-fields">
+                                                    <div class="form-group">
+                                                        <label>Título do slide</label>
+                                                        <input type="text" name="slide_title[]" value="<?= htmlspecialchars($slide['title'] ?? '') ?>">
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <label>Ordem</label>
+                                                        <input type="number" name="slide_order[]" value="<?= intval($slide['order_num'] ?? (($index + 1) * 10)) ?>">
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <label>Imagem</label>
+                                                        <select name="slide_image[]">
+                                                            <option value="">Sem imagem</option>
+                                                            <?php foreach ($images as $image): ?>
+                                                                <option value="<?= htmlspecialchars($image['filepath']) ?>" <?= (($slide['image'] ?? '') === $image['filepath']) ? 'selected' : '' ?>>
+                                                                    <?= htmlspecialchars($image['title']) ?>
+                                                                </option>
+                                                            <?php endforeach; ?>
+                                                            <?php if (!empty($slide['image']) && !array_filter($images, fn($img) => $img['filepath'] === $slide['image'])): ?>
+                                                                <option value="<?= htmlspecialchars($slide['image']) ?>" selected><?= htmlspecialchars($slide['image']) ?></option>
+                                                            <?php endif; ?>
+                                                        </select>
+                                                    </div>
+                                                    <div class="form-group slide-content-wrap">
+                                                        <label>Conteúdo</label>
+                                                        <textarea name="slide_content[]" class="slide-content"><?= htmlspecialchars($slide['content'] ?? '') ?></textarea>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <aside class="wp-editor-aside">
+                        <details class="wp-publish-box wp-metabox-collapsible" data-storage-key="admin-slide-publish">
+                            <summary class="wp-metabox-title">
+                                <h2>Publicar</h2>
+                                <span class="wp-metabox-toggle"><i class="fas fa-chevron-up"></i></span>
+                            </summary>
+                            <div class="wp-publish-body">
+                                <div class="wp-publish-state">
+                                    <div class="status-line">
+                                        <strong>Status</strong>
+                                        <span class="status-meta"><?= (($deck['status'] ?? 'draft') === 'published') ? 'Publicado' : 'Rascunho' ?></span>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="status">Estado</label>
+                                        <select id="status" name="status">
+                                            <option value="draft" <?= (($deck['status'] ?? 'draft') === 'draft') ? 'selected' : '' ?>>Rascunho</option>
+                                            <option value="published" <?= (($deck['status'] ?? 'draft') === 'published') ? 'selected' : '' ?>>Publicado</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="published_at">Publicar em</label>
+                                        <input
+                                            type="datetime-local"
+                                            id="published_at"
+                                            name="published_at"
+                                            value="<?= admin_format_datetime_local($deck['published_at'] ?? ($deck ? $deck['created_at'] : date('Y-m-d H:i:s'))) ?>"
+                                        >
+                                    </div>
+                                    <div class="wp-editor-actions-row">
+                                        <button type="submit" class="btn-submit">
+                                            <i class="fas fa-save"></i>Salvar
+                                        </button>
+                                        <a href="/admin/pages/slides.php" class="btn-cancel">
+                                            <i class="fas fa-times"></i>Cancelar
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </details>
+                    </aside>
+                </div>
+            </form>
+        </div>
     <?php endif; ?>
 </div>
 
@@ -500,11 +567,15 @@ function slide_status_label($status) {
         </div>
     </template>
     <script src="https://cdn.tiny.cloud/1/vzv83v6j3ph3tx55wbjhbuz9i0qsr8mhfhigw0k0kq9qqyhr/tinymce/8/tinymce.min.js" referrerpolicy="origin" crossorigin="anonymous"></script>
+    <script src="/admin/assets/tinymce-media.js?v=20260603"></script>
     <script>
         const titleField = document.getElementById('title');
         const slugField = document.getElementById('slug');
         const slugPreview = document.getElementById('slugPreview');
         const slidesList = document.getElementById('slidesList');
+        const metaboxes = document.querySelectorAll('.wp-metabox-collapsible');
+        const slidesForm = document.getElementById('slidesForm');
+        let submittingAfterUpload = false;
 
         function slugify(value) {
             return value.normalize('NFD')
@@ -532,14 +603,51 @@ function slide_status_label($status) {
                     selector: '#' + textarea.id,
                     height: 230,
                     menubar: false,
-                    plugins: 'autolink code codesample link lists table visualblocks wordcount',
-                    toolbar: 'undo redo | blocks | bold italic underline | bullist numlist | link table codesample blockquote | removeformat code',
+                    plugins: 'autolink code codesample image link lists media table visualblocks wordcount',
+                    toolbar: 'undo redo | blocks | bold italic underline | bullist numlist | link image media table codesample blockquote | removeformat code',
                     branding: false,
                     promotion: false,
                     language: 'pt-BR',
                     skin: 'oxide-dark',
                     content_css: 'dark',
-                    convert_urls: false
+                    automatic_uploads: true,
+                    convert_urls: false,
+                    images_upload_url: '/admin/ajax/tinymce-upload.php?type=image',
+                    file_picker_types: 'image media',
+                    file_picker_callback: function(callback, value, meta) {
+                        if (!window.CMSMediaTools) {
+                            return;
+                        }
+
+                        if (meta.filetype === 'image') {
+                            window.CMSMediaTools.openPicker('image/*', 'image', callback, meta);
+                            return;
+                        }
+
+                        if (meta.filetype === 'media') {
+                            window.CMSMediaTools.openPicker('video/*', 'media', callback, meta);
+                        }
+                    }
+                });
+            });
+        }
+
+        function initMetaboxStates() {
+            metaboxes.forEach(box => {
+                const storageKey = box.dataset.storageKey;
+                if (!storageKey) {
+                    return;
+                }
+
+                const storedState = localStorage.getItem(storageKey);
+                if (storedState === 'open') {
+                    box.open = true;
+                } else if (storedState === 'closed') {
+                    box.open = false;
+                }
+
+                box.addEventListener('toggle', function() {
+                    localStorage.setItem(storageKey, box.open ? 'open' : 'closed');
                 });
             });
         }
@@ -587,7 +695,12 @@ function slide_status_label($status) {
             updateSlugPreview();
         });
 
-        document.getElementById('slidesForm').addEventListener('submit', function(event) {
+        slidesForm.addEventListener('submit', function(event) {
+            if (submittingAfterUpload) {
+                submittingAfterUpload = false;
+                return;
+            }
+
             if (typeof tinymce !== 'undefined') {
                 tinymce.triggerSave();
             }
@@ -601,10 +714,27 @@ function slide_status_label($status) {
             if (!hasSlide) {
                 event.preventDefault();
                 alert('Adicione pelo menos um slide');
+                return;
+            }
+
+            const editors = typeof tinymce !== 'undefined' ? tinymce.editors : [];
+            const uploadPromises = Array.from(editors)
+                .filter(editor => typeof editor.uploadImages === 'function')
+                .map(editor => editor.uploadImages());
+
+            if (uploadPromises.length) {
+                event.preventDefault();
+                Promise.all(uploadPromises).then(function() {
+                    submittingAfterUpload = true;
+                    slidesForm.requestSubmit ? slidesForm.requestSubmit() : slidesForm.submit();
+                }).catch(function() {
+                    alert('Não foi possível enviar todas as imagens do conteúdo.');
+                });
             }
         });
 
         updateSlugPreview();
+        initMetaboxStates();
         renumberSlides();
         initEditors();
     </script>

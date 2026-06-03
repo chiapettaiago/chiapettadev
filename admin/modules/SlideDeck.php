@@ -98,7 +98,7 @@ class SlideDeck {
                 'description' => trim($data['description'] ?? ''),
                 'status' => $data['status'] ?? 'draft',
                 'created_by' => $userId,
-                'published_at' => ($data['status'] ?? 'draft') === 'published' ? date('Y-m-d H:i:s') : null
+                'published_at' => self::resolvePublishedAt($data['status'] ?? 'draft', $data['published_at'] ?? null)
             ]);
 
             self::saveSlides($deckId, $data['slides'] ?? []);
@@ -136,7 +136,7 @@ class SlideDeck {
                 'description' => trim($data['description'] ?? ''),
                 'status' => $data['status'] ?? 'draft',
                 'updated_at' => date('Y-m-d H:i:s'),
-                'published_at' => (($data['status'] ?? 'draft') === 'published' && empty($deck['published_at'])) ? date('Y-m-d H:i:s') : $deck['published_at']
+                'published_at' => self::resolvePublishedAt($data['status'] ?? $deck['status'], $data['published_at'] ?? $deck['published_at'] ?? null, $deck['published_at'] ?? null)
             ], "id = " . intval($deckId));
 
             self::saveSlides($deckId, $data['slides'] ?? []);
@@ -259,6 +259,41 @@ class SlideDeck {
         $slug = preg_replace('/[^a-z0-9]+/i', '-', $slug);
         $slug = trim($slug, '-');
         return strtolower($slug);
+    }
+
+    private static function resolvePublishedAt($status, $value = null, $fallback = null) {
+        if ($status !== 'published') {
+            return null;
+        }
+
+        $normalized = self::normalizeDateTime($value);
+        if ($normalized) {
+            return $normalized;
+        }
+
+        if (!empty($fallback)) {
+            $fallbackNormalized = self::normalizeDateTime($fallback);
+            if ($fallbackNormalized) {
+                return $fallbackNormalized;
+            }
+        }
+
+        return date('Y-m-d H:i:s');
+    }
+
+    private static function normalizeDateTime($value) {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+
+        $value = str_replace('T', ' ', $value);
+        if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $value)) {
+            $value .= ':00';
+        }
+
+        $timestamp = strtotime($value);
+        return $timestamp ? date('Y-m-d H:i:s', $timestamp) : null;
     }
 
     private static function escape($value) {

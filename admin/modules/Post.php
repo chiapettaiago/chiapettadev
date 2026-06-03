@@ -28,7 +28,7 @@ class Post {
                 'featured_image' => $data['featured_image'] ?? null,
                 'author_id' => $userId,
                 'status' => $data['status'] ?? 'draft',
-                'published_at' => ($data['status'] === 'published') ? date('Y-m-d H:i:s') : null
+                'published_at' => self::resolvePublishedAt($data['status'] ?? 'draft', $data['published_at'] ?? null)
             ];
 
             $postId = Database::getInstance()->insert('posts', $postData);
@@ -87,9 +87,7 @@ class Post {
                 'featured_image' => $data['featured_image'] ?? $post['featured_image'],
                 'status' => $data['status'] ?? $post['status'],
                 'updated_at' => date('Y-m-d H:i:s'),
-                'published_at' => ($data['status'] === 'published' && !$post['published_at']) 
-                    ? date('Y-m-d H:i:s') 
-                    : $post['published_at']
+                'published_at' => self::resolvePublishedAt($data['status'] ?? $post['status'], $data['published_at'] ?? $post['published_at'] ?? null, $post['published_at'] ?? null)
             ];
 
             Database::getInstance()->update('posts', $updateData, "id = $postId");
@@ -273,6 +271,41 @@ class Post {
         $slug = preg_replace('/[^a-z0-9]+/i', '-', $slug);
         $slug = trim($slug, '-');
         return strtolower($slug);
+    }
+
+    private static function resolvePublishedAt($status, $value = null, $fallback = null) {
+        if ($status !== 'published') {
+            return null;
+        }
+
+        $normalized = self::normalizeDateTime($value);
+        if ($normalized) {
+            return $normalized;
+        }
+
+        if (!empty($fallback)) {
+            $fallbackNormalized = self::normalizeDateTime($fallback);
+            if ($fallbackNormalized) {
+                return $fallbackNormalized;
+            }
+        }
+
+        return date('Y-m-d H:i:s');
+    }
+
+    private static function normalizeDateTime($value) {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+
+        $value = str_replace('T', ' ', $value);
+        if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $value)) {
+            $value .= ':00';
+        }
+
+        $timestamp = strtotime($value);
+        return $timestamp ? date('Y-m-d H:i:s', $timestamp) : null;
     }
 
     /**

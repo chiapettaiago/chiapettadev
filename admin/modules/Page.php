@@ -29,7 +29,7 @@ class Page {
                 'status' => $data['status'] ?? 'draft',
                 'parent_id' => !empty($data['parent_id']) ? intval($data['parent_id']) : null,
                 'order_num' => $data['order_num'] ?? 0,
-                'published_at' => ($data['status'] === 'published') ? date('Y-m-d H:i:s') : null
+                'published_at' => self::resolvePublishedAt($data['status'] ?? 'draft', $data['published_at'] ?? null)
             ];
 
             $pageId = Database::getInstance()->insert('pages', $pageData);
@@ -74,9 +74,7 @@ class Page {
                 'parent_id' => !empty($data['parent_id']) ? intval($data['parent_id']) : null,
                 'order_num' => $data['order_num'] ?? $page['order_num'],
                 'updated_at' => date('Y-m-d H:i:s'),
-                'published_at' => ($data['status'] === 'published' && !$page['published_at']) 
-                    ? date('Y-m-d H:i:s') 
-                    : $page['published_at']
+                'published_at' => self::resolvePublishedAt($data['status'] ?? $page['status'], $data['published_at'] ?? $page['published_at'] ?? null, $page['published_at'] ?? null)
             ];
 
             Database::getInstance()->update('pages', $updateData, "id = $pageId");
@@ -210,6 +208,41 @@ class Page {
         $slug = trim($slug, '-');
         $slug = strtolower($slug);
         return $slug;
+    }
+
+    private static function resolvePublishedAt($status, $value = null, $fallback = null) {
+        if ($status !== 'published') {
+            return null;
+        }
+
+        $normalized = self::normalizeDateTime($value);
+        if ($normalized) {
+            return $normalized;
+        }
+
+        if (!empty($fallback)) {
+            $fallbackNormalized = self::normalizeDateTime($fallback);
+            if ($fallbackNormalized) {
+                return $fallbackNormalized;
+            }
+        }
+
+        return date('Y-m-d H:i:s');
+    }
+
+    private static function normalizeDateTime($value) {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+
+        $value = str_replace('T', ' ', $value);
+        if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $value)) {
+            $value .= ':00';
+        }
+
+        $timestamp = strtotime($value);
+        return $timestamp ? date('Y-m-d H:i:s', $timestamp) : null;
     }
 }
 ?>
