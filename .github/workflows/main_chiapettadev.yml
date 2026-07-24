@@ -57,4 +57,4 @@ jobs:
           app-name: 'chiapettadev'
           slot-name: 'Production'
           package: .
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_E83D2EECDC63436D8FB22E4DA053EA2D }}
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_E55BFFD1B9E343B69966B3D0F55DE883 }}
