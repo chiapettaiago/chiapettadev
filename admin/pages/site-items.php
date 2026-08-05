@@ -18,6 +18,7 @@ $message = '';
 $messageType = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    $uploadedImageId = null;
     $data = [
         'section' => $_POST['section'] ?? 'skill',
         'title' => $_POST['title'] ?? '',
@@ -33,18 +34,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         'order_num' => intval($_POST['order_num'] ?? 0)
     ];
 
-    if ($_POST['action'] === 'create') {
+    if (in_array($_POST['action'], ['create', 'update'], true)
+        && isset($_FILES['image_upload'])
+        && ($_FILES['image_upload']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+        $uploadResult = Image::upload($_FILES['image_upload'], $user['id'], [
+            'title' => $data['title'] ?: 'Imagem do projeto',
+            'alt_text' => $data['title'],
+            'description' => 'Imagem enviada pela edição de item do site.'
+        ]);
+
+        if ($uploadResult['success']) {
+            $data['image'] = $uploadResult['filepath'];
+            $uploadedImageId = intval($uploadResult['id']);
+        } else {
+            $result = $uploadResult;
+        }
+    }
+
+    if (!isset($result) && $_POST['action'] === 'create') {
         $result = SiteItem::create($data);
-    } elseif ($_POST['action'] === 'update') {
+    } elseif (!isset($result) && $_POST['action'] === 'update') {
         $result = SiteItem::update(intval($_POST['item_id'] ?? 0), $data);
     } elseif ($_POST['action'] === 'delete') {
         $result = SiteItem::delete(intval($_POST['item_id'] ?? 0));
-    } else {
+    } elseif (!isset($result)) {
         $result = ['success' => false, 'message' => 'Ação inválida'];
     }
 
+    if (!$result['success'] && $uploadedImageId) {
+        Image::delete($uploadedImageId);
+    }
+
     if ($result['success']) {
-        if ($_POST['action'] === 'create' || $_POST['action'] === 'delete') {
+        if (in_array($_POST['action'], ['create', 'update', 'delete'], true)) {
             $redirectSection = $_POST['redirect_section'] ?? '';
             $redirectUrl = '/admin/pages/site-items.php' . ($redirectSection ? '?section=' . urlencode($redirectSection) : '');
             header('Location: ' . $redirectUrl);
@@ -61,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 $sections = SiteItem::getSections();
 $editId = intval($_GET['edit'] ?? 0);
-$item = $editId ? SiteItem::getById($editId) : null;
+$siteItem = $editId > 0 ? SiteItem::getById($editId) : null;
 $images = Image::getList();
 $filterSection = $_GET['section'] ?? '';
 $items = !$editId ? SiteItem::getList(['section' => $filterSection]) : [];
@@ -281,10 +303,10 @@ function cms_first_words($text, $limit = 110) {
     <div class="container">
         <div class="header">
             <div>
-                <h1><?= $item ? 'Editar Item do Site' : ($filterSection === 'nav' ? 'Menu Navbar' : 'Itens do Site') ?></h1>
+                <h1><?= $siteItem ? 'Editar Item do Site' : ($filterSection === 'nav' ? 'Menu Navbar' : 'Itens do Site') ?></h1>
                 <p style="color: var(--text-muted); margin: 0;">Gerencie habilidades, projetos, destaques do blog e links da navbar exibidos no site.</p>
             </div>
-            <?php if (!$item): ?>
+            <?php if (!$siteItem): ?>
                 <a href="<?= htmlspecialchars($newItemUrl) ?>" class="btn-primary">
                     <i class="fas fa-plus"></i>Novo Item
                 </a>
@@ -296,13 +318,13 @@ function cms_first_words($text, $limit = 110) {
         <?php endif; ?>
 
         <?php if ($editId || isset($_GET['edit'])): ?>
-            <?php $isNew = !$item; ?>
+            <?php $isNew = !$siteItem; ?>
             <div class="form-card">
-                <form method="POST">
+                <form method="POST" enctype="multipart/form-data">
                     <input type="hidden" name="action" value="<?= $isNew ? 'create' : 'update' ?>">
-                    <input type="hidden" name="redirect_section" value="<?= htmlspecialchars($item['section'] ?? $filterSection) ?>">
+                    <input type="hidden" name="redirect_section" value="<?= htmlspecialchars($siteItem['section'] ?? $filterSection) ?>">
                     <?php if (!$isNew): ?>
-                        <input type="hidden" name="item_id" value="<?= intval($item['id']) ?>">
+                        <input type="hidden" name="item_id" value="<?= intval($siteItem['id']) ?>">
                     <?php endif; ?>
 
                     <div class="form-grid">
@@ -310,7 +332,7 @@ function cms_first_words($text, $limit = 110) {
                             <label for="section">Tipo</label>
                             <select id="section" name="section" required>
                                 <?php foreach ($sections as $key => $label): ?>
-                                    <option value="<?= htmlspecialchars($key) ?>" <?= (($item['section'] ?? $filterSection ?: 'skill') === $key) ? 'selected' : '' ?>>
+                                    <option value="<?= htmlspecialchars($key) ?>" <?= (($siteItem['section'] ?? $filterSection ?: 'skill') === $key) ? 'selected' : '' ?>>
                                         <?= htmlspecialchars($label) ?>
                                     </option>
                                 <?php endforeach; ?>
@@ -320,73 +342,80 @@ function cms_first_words($text, $limit = 110) {
                         <div class="form-group">
                             <label for="status">Status</label>
                             <select id="status" name="status">
-                                <option value="draft" <?= (($item['status'] ?? 'published') === 'draft') ? 'selected' : '' ?>>Rascunho</option>
-                                <option value="published" <?= (($item['status'] ?? 'published') === 'published') ? 'selected' : '' ?>>Publicado</option>
+                                <option value="draft" <?= (($siteItem['status'] ?? 'published') === 'draft') ? 'selected' : '' ?>>Rascunho</option>
+                                <option value="published" <?= (($siteItem['status'] ?? 'published') === 'published') ? 'selected' : '' ?>>Publicado</option>
                             </select>
                         </div>
 
                         <div class="form-group full">
                             <label for="title">Título</label>
-                            <input type="text" id="title" name="title" value="<?= htmlspecialchars($item['title'] ?? '') ?>" required>
+                            <input type="text" id="title" name="title" value="<?= htmlspecialchars($siteItem['title'] ?? '') ?>" required>
                         </div>
 
                         <div class="form-group full">
                             <label for="description">Descrição</label>
-                            <textarea id="description" name="description"><?= htmlspecialchars($item['description'] ?? '') ?></textarea>
+                            <textarea id="description" name="description"><?= htmlspecialchars($siteItem['description'] ?? '') ?></textarea>
                             <small>Usada em projetos e destaques do blog. Habilidades e links da navbar podem ficar sem descrição.</small>
                         </div>
 
                         <div class="form-group">
-                            <label for="image">Imagem</label>
+                            <label for="image">Imagem cadastrada</label>
                             <select id="image" name="image">
                                 <option value="">Sem imagem</option>
                                 <?php foreach ($images as $image): ?>
-                                    <option value="<?= htmlspecialchars($image['filepath']) ?>" <?= (($item['image'] ?? '') === $image['filepath']) ? 'selected' : '' ?>>
+                                    <option value="<?= htmlspecialchars($image['filepath']) ?>" <?= (($siteItem['image'] ?? '') === $image['filepath']) ? 'selected' : '' ?>>
                                         <?= htmlspecialchars($image['title']) ?>
                                     </option>
                                 <?php endforeach; ?>
-                                <?php if (!empty($item['image']) && !array_filter($images, fn($img) => $img['filepath'] === $item['image'])): ?>
-                                    <option value="<?= htmlspecialchars($item['image']) ?>" selected><?= htmlspecialchars($item['image']) ?></option>
+                                <?php if (!empty($siteItem['image']) && !array_filter($images, fn($img) => $img['filepath'] === $siteItem['image'])): ?>
+                                    <option value="<?= htmlspecialchars($siteItem['image']) ?>" selected><?= htmlspecialchars($siteItem['image']) ?></option>
                                 <?php endif; ?>
                             </select>
+                            <small>Escolha uma imagem existente ou envie uma nova abaixo.</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="image_upload">Enviar nova imagem</label>
+                            <input type="file" id="image_upload" name="image_upload" accept="image/jpeg,image/png,image/gif,image/webp">
+                            <small>JPG, PNG, GIF ou WEBP, com no máximo 5 MB. A nova imagem terá prioridade sobre a seleção.</small>
                         </div>
 
                         <div class="form-group">
                             <label for="icon">Ícone ou emoji</label>
-                            <input type="text" id="icon" name="icon" value="<?= htmlspecialchars($item['icon'] ?? '') ?>" placeholder="Ex.: 👩‍💼">
+                            <input type="text" id="icon" name="icon" value="<?= htmlspecialchars($siteItem['icon'] ?? '') ?>" placeholder="Ex.: 👩‍💼">
                             <small>Aparece quando o projeto não tem imagem.</small>
                         </div>
 
                         <div class="form-group">
                             <label for="tags">Tags</label>
-                            <input type="text" id="tags" name="tags" value="<?= htmlspecialchars($item['tags'] ?? '') ?>" placeholder="PHP, Linux, Python">
+                            <input type="text" id="tags" name="tags" value="<?= htmlspecialchars($siteItem['tags'] ?? '') ?>" placeholder="PHP, Linux, Python">
                             <small>Separe por vírgula.</small>
                         </div>
 
                         <div class="form-group">
                             <label for="order_num">Ordem</label>
-                            <input type="number" id="order_num" name="order_num" value="<?= intval($item['order_num'] ?? 0) ?>">
+                            <input type="number" id="order_num" name="order_num" value="<?= intval($siteItem['order_num'] ?? 0) ?>">
                         </div>
 
                         <div class="form-group">
                             <label for="primary_label">Texto do link principal</label>
-                            <input type="text" id="primary_label" name="primary_label" value="<?= htmlspecialchars($item['primary_label'] ?? '') ?>" placeholder="Ver projeto">
+                            <input type="text" id="primary_label" name="primary_label" value="<?= htmlspecialchars($siteItem['primary_label'] ?? '') ?>" placeholder="Ver projeto">
                         </div>
 
                         <div class="form-group">
                             <label for="primary_url">URL principal</label>
-                            <input type="text" id="primary_url" name="primary_url" value="<?= htmlspecialchars($item['primary_url'] ?? '') ?>" placeholder="https://... ou /blog/...">
+                            <input type="text" id="primary_url" name="primary_url" value="<?= htmlspecialchars($siteItem['primary_url'] ?? '') ?>" placeholder="https://... ou /blog/...">
                             <small>Para a navbar, use links como <strong>#sobre</strong>, <strong>#blog</strong>, <strong>/blog/</strong> ou uma URL externa.</small>
                         </div>
 
                         <div class="form-group">
                             <label for="secondary_label">Texto do link secundário</label>
-                            <input type="text" id="secondary_label" name="secondary_label" value="<?= htmlspecialchars($item['secondary_label'] ?? '') ?>" placeholder="GitHub">
+                            <input type="text" id="secondary_label" name="secondary_label" value="<?= htmlspecialchars($siteItem['secondary_label'] ?? '') ?>" placeholder="GitHub">
                         </div>
 
                         <div class="form-group">
                             <label for="secondary_url">URL secundária</label>
-                            <input type="text" id="secondary_url" name="secondary_url" value="<?= htmlspecialchars($item['secondary_url'] ?? '') ?>">
+                            <input type="text" id="secondary_url" name="secondary_url" value="<?= htmlspecialchars($siteItem['secondary_url'] ?? '') ?>">
                         </div>
                     </div>
 

@@ -121,6 +121,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $savedPostId = $_POST['action'] === 'create' ? intval($result['id']) : intval($_POST['post_id'] ?? 0);
                     sync_blog_highlight_image($savedPostId);
 
+                    $autosaveToken = trim($_POST['autosave_token'] ?? '');
+                    if ($autosaveToken !== '' && Database::getInstance()->tableExists('post_autosaves')) {
+                        Database::getInstance()->query(
+                            'DELETE FROM post_autosaves WHERE user_id = ? AND draft_token = ?',
+                            [$user['id'], $autosaveToken]
+                        );
+                    }
+
                     $message = $result['message'];
                     $messageType = 'success';
                     
@@ -950,22 +958,25 @@ if (!$editId && !$isNew) {
             }
         </style>
         <link rel="stylesheet" href="/admin/assets/admin.css?v=20260516">
+        <link rel="stylesheet" href="/admin/assets/post-editor.css?v=20260805">
 </head>
     <body>
     <?php include __DIR__ . '/../partials/sidebar.php'; ?>
     <div class="wp-editor-shell">
         <div class="wp-editor-header">
             <div>
-                <h1><?= $post ? 'Editar Post' : 'Novo Post' ?></h1>
-                <p class="wp-editor-note">Estrutura em duas colunas inspirada no editor clássico do WordPress.</p>
+                <div class="post-editor-kicker"><i class="fas fa-pen-nib"></i> Conteúdo do blog</div>
+                <h1><?= $post ? 'Editar post' : 'Criar novo post' ?></h1>
+                <p class="wp-editor-note"><?= $post ? 'Revise o conteúdo, ajuste a publicação e salve suas alterações.' : 'Escreva, organize e publique um novo artigo no seu blog.' ?></p>
             </div>
             <div class="wp-editor-header-actions">
+                <span class="post-save-state" id="postSaveState"><i class="fas fa-check-circle"></i> Tudo salvo</span>
                 <a href="/admin/pages/posts.php" class="btn-cancel">
                     <i class="fas fa-arrow-left"></i>Voltar
                 </a>
                 <?php if ($post && ($post['status'] ?? '') === 'published'): ?>
-                    <a href="/blog/<?= htmlspecialchars($post['slug']) ?>/" target="_blank" class="btn-primary">
-                        <i class="fas fa-eye"></i>Ver post
+                    <a href="/blog/<?= htmlspecialchars($post['slug']) ?>/" target="_blank" rel="noopener" class="post-view-button">
+                        <i class="fas fa-arrow-up-right-from-square"></i><span>Ver post</span>
                     </a>
                 <?php endif; ?>
             </div>
@@ -977,8 +988,20 @@ if (!$editId && !$isNew) {
             </div>
         <?php endif; ?>
 
+        <div class="post-recovery-banner" id="postRecoveryBanner" hidden>
+            <div>
+                <i class="fas fa-clock-rotate-left"></i>
+                <span><strong>Rascunho automático encontrado.</strong> Há alterações mais recentes que ainda não foram publicadas.</span>
+            </div>
+            <div class="post-recovery-actions">
+                <button type="button" class="btn-cancel" id="discardAutosave">Descartar</button>
+                <button type="button" class="btn-submit" id="restoreAutosave">Recuperar rascunho</button>
+            </div>
+        </div>
+
         <form method="POST" action="" enctype="multipart/form-data" id="postEditorForm">
             <input type="hidden" name="action" value="<?= $post ? 'update' : 'create' ?>">
+            <input type="hidden" name="autosave_token" id="autosaveToken" value="">
             <?php if ($post): ?>
                 <input type="hidden" name="post_id" value="<?= $post['id'] ?>">
             <?php endif; ?>
@@ -987,7 +1010,8 @@ if (!$editId && !$isNew) {
                 <div class="wp-editor-main">
                     <section class="wp-metabox">
                         <div class="wp-metabox-title">
-                            <h2>Título e link</h2>
+                            <div><span class="post-section-icon"><i class="fas fa-heading"></i></span><h2>Título e endereço</h2></div>
+                            <small>Como o artigo será identificado</small>
                         </div>
                         <div class="wp-metabox-body">
                             <div class="form-group">
@@ -1022,7 +1046,11 @@ if (!$editId && !$isNew) {
 
                     <section class="wp-metabox">
                         <div class="wp-metabox-title">
-                            <h2>Conteúdo</h2>
+                            <div><span class="post-section-icon"><i class="fas fa-align-left"></i></span><h2>Conteúdo</h2></div>
+                            <div class="post-content-metrics" aria-live="polite">
+                                <span id="wordCount">0 palavras</span>
+                                <span id="readingTime">0 min de leitura</span>
+                            </div>
                         </div>
                         <div class="wp-metabox-body">
                             <div class="wp-editor-tabs" role="tablist" aria-label="Modo do editor">
@@ -1042,11 +1070,12 @@ if (!$editId && !$isNew) {
 
                     <section class="wp-metabox">
                         <div class="wp-metabox-title">
-                            <h2>Resumo</h2>
+                            <div><span class="post-section-icon"><i class="fas fa-quote-left"></i></span><h2>Resumo</h2></div>
+                            <small>Texto usado nos cards e resultados de busca</small>
                         </div>
                         <div class="wp-metabox-body">
                             <div class="form-group">
-                                <label for="excerpt">Excerpt</label>
+                                <div class="post-label-row"><label for="excerpt">Resumo do artigo</label><span id="excerptCount">0 caracteres</span></div>
                                 <textarea
                                     id="excerpt"
                                     name="excerpt"
@@ -1059,16 +1088,16 @@ if (!$editId && !$isNew) {
                 </div>
 
                 <aside class="wp-editor-aside">
-                    <details class="wp-publish-box wp-metabox-collapsible" data-storage-key="admin-post-publish">
+                    <details class="wp-publish-box wp-metabox-collapsible" data-storage-key="admin-post-publish" open>
                         <summary class="wp-metabox-title">
-                            <h2>Publicar</h2>
+                            <h2><i class="fas fa-paper-plane"></i> Publicação</h2>
                             <span class="wp-metabox-toggle"><i class="fas fa-chevron-up"></i></span>
                         </summary>
                         <div class="wp-publish-body">
                             <div class="wp-publish-state">
                                 <div class="status-line">
                                     <strong>Status</strong>
-                                    <span class="status-meta"><?= (($post['status'] ?? 'draft') === 'published') ? 'Publicado' : 'Rascunho' ?></span>
+                                    <span class="status-meta" id="statusMeta"><?= (($post['status'] ?? 'draft') === 'published') ? 'Publicado' : 'Rascunho' ?></span>
                                 </div>
                                 <div class="form-group">
                                     <label for="status">Estado</label>
@@ -1087,20 +1116,21 @@ if (!$editId && !$isNew) {
                                     >
                                 </div>
                                 <div class="wp-editor-actions-row">
-                                    <button type="submit" class="btn-submit">
-                                        <i class="fas fa-save"></i><?= $post ? 'Atualizar' : 'Publicar' ?>
+                                    <button type="button" class="btn-cancel post-save-draft" data-submit-status="draft">
+                                        <i class="fas fa-file"></i>Salvar rascunho
                                     </button>
-                                    <a href="/admin/pages/posts.php" class="btn-cancel">
-                                        <i class="fas fa-times"></i>Cancelar
-                                    </a>
+                                    <button type="submit" class="btn-submit" id="primarySubmitButton">
+                                        <i class="fas fa-save"></i><span><?= $post ? 'Atualizar post' : 'Salvar rascunho' ?></span>
+                                    </button>
                                 </div>
+                                <p class="post-shortcut-hint"><kbd>Ctrl</kbd> + <kbd>S</kbd> para salvar</p>
                             </div>
                         </div>
                     </details>
 
-                    <details class="wp-metabox wp-metabox-collapsible" data-storage-key="admin-post-featured-image">
+                    <details class="wp-metabox wp-metabox-collapsible" data-storage-key="admin-post-featured-image" open>
                         <summary class="wp-metabox-title">
-                            <h2>Imagem destacada</h2>
+                            <h2><i class="fas fa-image"></i> Imagem destacada</h2>
                             <span class="wp-metabox-toggle"><i class="fas fa-chevron-up"></i></span>
                         </summary>
                         <div class="wp-metabox-body">
@@ -1131,7 +1161,7 @@ if (!$editId && !$isNew) {
 
                     <details class="wp-metabox wp-metabox-collapsible" data-storage-key="admin-post-tags">
                         <summary class="wp-metabox-title">
-                            <h2>Tags</h2>
+                            <h2><i class="fas fa-tags"></i> Tags</h2>
                             <span class="wp-metabox-toggle"><i class="fas fa-chevron-up"></i></span>
                         </summary>
                         <div class="wp-metabox-body">
@@ -1150,7 +1180,7 @@ if (!$editId && !$isNew) {
 
                     <details class="wp-metabox wp-metabox-collapsible" data-storage-key="admin-post-categories">
                         <summary class="wp-metabox-title">
-                            <h2>Categorias</h2>
+                            <h2><i class="fas fa-folder-open"></i> Categorias</h2>
                             <span class="wp-metabox-toggle"><i class="fas fa-chevron-up"></i></span>
                         </summary>
                         <div class="wp-metabox-body">
@@ -1167,6 +1197,11 @@ if (!$editId && !$isNew) {
                         </div>
                     </details>
                 </aside>
+            </div>
+
+            <div class="post-mobile-actions" aria-label="Ações de publicação">
+                <button type="button" class="btn-cancel post-save-draft" data-submit-status="draft"><i class="fas fa-file"></i>Rascunho</button>
+                <button type="submit" class="btn-submit post-mobile-primary"><i class="fas fa-save"></i><span>Salvar</span></button>
             </div>
 
             <div class="media-modal" id="mediaModal" aria-hidden="true">
@@ -1188,6 +1223,10 @@ if (!$editId && !$isNew) {
                     </div>
 
                     <div class="media-panel active" id="mediaPanelLibrary">
+                        <div class="media-search-wrap">
+                            <i class="fas fa-search"></i>
+                            <input type="search" id="mediaSearch" placeholder="Buscar imagem por nome" autocomplete="off">
+                        </div>
                         <?php if (!empty($images)): ?>
                             <div class="media-grid">
                                 <?php foreach ($images as $img): ?>
@@ -1247,10 +1286,32 @@ if (!$editId && !$isNew) {
             const uploadPreview = document.getElementById('uploadPreview');
             const editorTabs = document.querySelectorAll('.wp-editor-tab');
             const metaboxes = document.querySelectorAll('.wp-metabox-collapsible');
+            const excerptField = document.getElementById('excerpt');
+            const excerptCount = document.getElementById('excerptCount');
+            const wordCount = document.getElementById('wordCount');
+            const readingTime = document.getElementById('readingTime');
+            const statusField = document.getElementById('status');
+            const statusMeta = document.getElementById('statusMeta');
+            const primarySubmitButton = document.getElementById('primarySubmitButton');
+            const mobileSubmitLabel = document.querySelector('.post-mobile-primary span');
+            const saveState = document.getElementById('postSaveState');
+            const mediaSearch = document.getElementById('mediaSearch');
+            const autosaveTokenField = document.getElementById('autosaveToken');
+            const recoveryBanner = document.getElementById('postRecoveryBanner');
+            const restoreAutosaveButton = document.getElementById('restoreAutosave');
+            const discardAutosaveButton = document.getElementById('discardAutosave');
+            const postId = <?= intval($post['id'] ?? 0) ?>;
+            const serverUpdatedAt = <?= json_encode($post['updated_at'] ?? $post['created_at'] ?? null) ?>;
+            const newPostTokenKey = 'cms-new-post-autosave-token-<?= intval($user['id']) ?>';
             let pendingLibraryImage = featuredImageField.value;
             let pendingUploadSelected = false;
             let currentEditorMode = 'visual';
             let submittingAfterUpload = false;
+            let formDirty = false;
+            let isLeaving = false;
+            let autosaveTimer = null;
+            let autosaveRequest = null;
+            let recoveredPayload = null;
             const contentImages = <?= json_encode(array_map(function($image) {
                 return [
                     'title' => $image['title'],
@@ -1322,6 +1383,11 @@ if (!$editId && !$isNew) {
                 plugins: 'anchor autolink charmap code codesample fullscreen image link lists media preview searchreplace table visualblocks wordcount',
                 toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | link image media table codesample blockquote | forecolor backcolor removeformat | code preview fullscreen',
                 toolbar_mode: 'sliding',
+                mobile: {
+                    menubar: false,
+                    toolbar: 'undo redo | blocks | bold italic | bullist numlist | link image | code',
+                    toolbar_mode: 'scrolling'
+                },
                 branding: false,
                 promotion: false,
                 language: 'pt-BR',
@@ -1334,8 +1400,13 @@ if (!$editId && !$isNew) {
                 images_upload_url: '/admin/ajax/tinymce-upload.php?type=image',
                 image_advtab: true,
                 file_picker_types: 'image media',
-                init_instance_callback: function() {
+                init_instance_callback: function(editor) {
                     setEditorMode('visual');
+                    updateContentMetrics(editor.getContent({ format: 'text' }));
+                    editor.on('input change undo redo', function() {
+                        markFormDirty();
+                        updateContentMetrics(editor.getContent({ format: 'text' }));
+                    });
                 },
                 file_picker_callback: function(callback, value, meta) {
                     if (!window.CMSMediaTools) {
@@ -1366,6 +1437,179 @@ if (!$editId && !$isNew) {
             function updateSlugPreview() {
                 const slug = slugField.value.trim() || slugify(titleField.value) || 'novo-post';
                 slugPreview.textContent = slug;
+            }
+
+            function updateContentMetrics(value) {
+                const text = String(value || '').replace(/\s+/g, ' ').trim();
+                const totalWords = text ? text.split(' ').length : 0;
+                const minutes = totalWords ? Math.max(1, Math.ceil(totalWords / 220)) : 0;
+                wordCount.textContent = `${totalWords} ${totalWords === 1 ? 'palavra' : 'palavras'}`;
+                readingTime.textContent = `${minutes} min de leitura`;
+            }
+
+            function updateExcerptCount() {
+                const total = excerptField.value.length;
+                excerptCount.textContent = `${total} ${total === 1 ? 'caractere' : 'caracteres'}`;
+            }
+
+            function updatePublishControls() {
+                const isPublished = statusField.value === 'published';
+                const label = isPublished ? '<?= $post ? 'Atualizar publicação' : 'Publicar agora' ?>' : 'Salvar rascunho';
+                statusMeta.textContent = isPublished ? 'Publicado' : 'Rascunho';
+                primarySubmitButton.querySelector('span').textContent = label;
+                mobileSubmitLabel.textContent = isPublished ? 'Publicar' : 'Salvar';
+            }
+
+            function markFormDirty() {
+                scheduleAutosave();
+                if (!formDirty) {
+                    formDirty = true;
+                    saveState.classList.add('is-dirty');
+                    saveState.innerHTML = '<i class="fas fa-circle"></i> Alterações não salvas';
+                }
+            }
+
+            function markSaving() {
+                saveState.classList.remove('is-dirty');
+                saveState.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando…';
+            }
+
+            function createAutosaveToken() {
+                if (postId > 0) {
+                    return `post_${postId}_<?= intval($user['id']) ?>_autosave`;
+                }
+
+                let token = localStorage.getItem(newPostTokenKey);
+                if (!token) {
+                    const randomPart = window.crypto && window.crypto.randomUUID
+                        ? window.crypto.randomUUID().replace(/-/g, '')
+                        : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+                    token = `new_${randomPart}`;
+                    localStorage.setItem(newPostTokenKey, token);
+                }
+                return token;
+            }
+
+            function getEditorContent() {
+                const editor = typeof tinymce !== 'undefined' ? tinymce.get('content') : null;
+                return currentEditorMode === 'text' || !editor ? contentField.value : editor.getContent();
+            }
+
+            function collectAutosavePayload() {
+                return {
+                    title: titleField.value,
+                    slug: slugField.value,
+                    content: getEditorContent(),
+                    excerpt: excerptField.value,
+                    status: statusField.value,
+                    published_at: document.getElementById('published_at').value,
+                    featured_image: featuredImageField.value,
+                    tags: document.getElementById('tags').value,
+                    categories: Array.from(document.getElementById('categories').selectedOptions).map(option => option.value)
+                };
+            }
+
+            function scheduleAutosave() {
+                if (isLeaving) return;
+                window.clearTimeout(autosaveTimer);
+                autosaveTimer = window.setTimeout(saveAutosave, 1300);
+            }
+
+            async function saveAutosave() {
+                if (isLeaving || !formDirty) return;
+
+                if (autosaveRequest) {
+                    autosaveRequest.abort();
+                }
+                autosaveRequest = new AbortController();
+                saveState.classList.add('is-dirty');
+                saveState.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando automaticamente…';
+
+                const body = new FormData();
+                body.append('token', autosaveTokenField.value);
+                body.append('post_id', String(postId));
+                body.append('payload', JSON.stringify(collectAutosavePayload()));
+
+                try {
+                    const response = await fetch('/admin/ajax/post-autosave.php', {
+                        method: 'POST',
+                        body,
+                        credentials: 'same-origin',
+                        signal: autosaveRequest.signal
+                    });
+                    const result = await response.json();
+                    if (!response.ok || !result.success) {
+                        throw new Error(result.message || 'Falha no autosave');
+                    }
+
+                    formDirty = false;
+                    saveState.classList.remove('is-dirty');
+                    saveState.innerHTML = `<i class="fas fa-cloud-check"></i> Salvo automaticamente às ${escapeHtml(result.saved_at || '')}`;
+                } catch (error) {
+                    if (error.name === 'AbortError') return;
+                    saveState.classList.add('is-dirty');
+                    saveState.innerHTML = navigator.onLine
+                        ? '<i class="fas fa-triangle-exclamation"></i> Não foi possível salvar'
+                        : '<i class="fas fa-wifi"></i> Sem conexão — tentando novamente';
+                    scheduleAutosave();
+                } finally {
+                    autosaveRequest = null;
+                }
+            }
+
+            function applyRecoveredPayload(payload) {
+                if (!payload) return;
+                titleField.value = payload.title || '';
+                slugField.value = payload.slug || '';
+                contentField.value = payload.content || '';
+                excerptField.value = payload.excerpt || '';
+                statusField.value = payload.status === 'published' ? 'published' : 'draft';
+                document.getElementById('published_at').value = payload.published_at || '';
+                featuredImageField.value = payload.featured_image || '';
+                document.getElementById('tags').value = payload.tags || '';
+
+                const selectedCategories = new Set((payload.categories || []).map(String));
+                Array.from(document.getElementById('categories').options).forEach(option => {
+                    option.selected = selectedCategories.has(option.value);
+                });
+
+                const editor = typeof tinymce !== 'undefined' ? tinymce.get('content') : null;
+                if (editor) editor.setContent(contentField.value);
+                renderFeaturedImage(featuredImageField.value, titleField.value || 'Imagem destacada');
+                updateSlugPreview();
+                updateExcerptCount();
+                updateContentMetrics(contentField.value.replace(/<[^>]*>/g, ' '));
+                updatePublishControls();
+                recoveryBanner.hidden = true;
+                markFormDirty();
+            }
+
+            async function discardAutosave() {
+                const body = new FormData();
+                body.append('token', autosaveTokenField.value);
+                body.append('autosave_action', 'discard');
+                await fetch('/admin/ajax/post-autosave.php', { method: 'POST', body, credentials: 'same-origin' });
+                recoveryBanner.hidden = true;
+                recoveredPayload = null;
+            }
+
+            async function loadAutosave() {
+                try {
+                    const response = await fetch(`/admin/ajax/post-autosave.php?token=${encodeURIComponent(autosaveTokenField.value)}`, {
+                        credentials: 'same-origin'
+                    });
+                    const result = await response.json();
+                    if (!result.success || !result.autosave || !result.autosave.payload) return;
+
+                    const autosaveTime = Date.parse(result.autosave.updated_at.replace(' ', 'T') + 'Z');
+                    const serverTime = serverUpdatedAt ? Date.parse(serverUpdatedAt.replace(' ', 'T') + 'Z') : 0;
+                    if (postId === 0 || autosaveTime > serverTime) {
+                        recoveredPayload = result.autosave.payload;
+                        recoveryBanner.hidden = false;
+                    }
+                } catch (error) {
+                    // O editor continua funcional mesmo se a consulta do autosave falhar.
+                }
             }
 
             function renderFeaturedImage(src, alt = 'Imagem destacada') {
@@ -1456,6 +1700,7 @@ if (!$editId && !$isNew) {
                     featuredImageMode.value = 'upload';
                     const previewImage = uploadPreview.querySelector('img');
                     renderFeaturedImage(previewImage ? previewImage.src : '', file.name);
+                    markFormDirty();
                     closeMediaModal();
                     return;
                 }
@@ -1463,6 +1708,7 @@ if (!$editId && !$isNew) {
                 featuredImageField.value = pendingLibraryImage || '';
                 featuredImageMode.value = 'library';
                 renderFeaturedImage(featuredImageField.value, document.getElementById('title').value || 'Imagem destacada');
+                markFormDirty();
                 closeMediaModal();
             }
 
@@ -1480,6 +1726,7 @@ if (!$editId && !$isNew) {
                 }
                 document.querySelectorAll('.media-item').forEach(item => item.classList.remove('selected'));
                 renderFeaturedImage('');
+                markFormDirty();
             }
 
             function escapeHtml(value) {
@@ -1497,7 +1744,52 @@ if (!$editId && !$isNew) {
                 updateSlugPreview();
             });
             updateSlugPreview();
+            updateExcerptCount();
+            updateContentMetrics(contentField.value.replace(/<[^>]*>/g, ' '));
+            updatePublishControls();
             initMetaboxStates();
+            autosaveTokenField.value = createAutosaveToken();
+            loadAutosave();
+
+            excerptField.addEventListener('input', updateExcerptCount);
+            statusField.addEventListener('change', updatePublishControls);
+            contentField.addEventListener('input', function() {
+                markFormDirty();
+                updateContentMetrics(contentField.value.replace(/<[^>]*>/g, ' '));
+            });
+
+            postForm.addEventListener('input', function(event) {
+                if (event.target !== contentField) {
+                    markFormDirty();
+                }
+            });
+
+            document.querySelectorAll('[data-submit-status]').forEach(button => {
+                button.addEventListener('click', function() {
+                    statusField.value = button.dataset.submitStatus || 'draft';
+                    updatePublishControls();
+                    postForm.requestSubmit(primarySubmitButton);
+                });
+            });
+
+            if (mediaSearch) {
+                mediaSearch.addEventListener('input', function() {
+                    const query = mediaSearch.value.trim().toLocaleLowerCase('pt-BR');
+                    document.querySelectorAll('.media-item').forEach(item => {
+                        const title = (item.dataset.title || '').toLocaleLowerCase('pt-BR');
+                        item.hidden = query !== '' && !title.includes(query);
+                    });
+                });
+            }
+
+            restoreAutosaveButton.addEventListener('click', function() {
+                applyRecoveredPayload(recoveredPayload);
+            });
+            discardAutosaveButton.addEventListener('click', discardAutosave);
+
+            window.addEventListener('online', function() {
+                if (formDirty) scheduleAutosave();
+            });
 
             mediaModal.addEventListener('click', function(event) {
                 if (event.target === mediaModal) {
@@ -1509,10 +1801,24 @@ if (!$editId && !$isNew) {
                 if (event.key === 'Escape' && mediaModal.classList.contains('active')) {
                     closeMediaModal();
                 }
+
+                if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+                    event.preventDefault();
+                    postForm.requestSubmit(primarySubmitButton);
+                }
+            });
+
+            window.addEventListener('beforeunload', function(event) {
+                if (!formDirty || isLeaving) return;
+                event.preventDefault();
+                event.returnValue = '';
             });
 
             postForm.addEventListener('submit', function(event) {
+                window.clearTimeout(autosaveTimer);
                 if (submittingAfterUpload) {
+                    isLeaving = true;
+                    markSaving();
                     submittingAfterUpload = false;
                     return;
                 }
@@ -1545,7 +1851,11 @@ if (!$editId && !$isNew) {
                     }).catch(function() {
                         alert('Não foi possível enviar todas as imagens do conteúdo.');
                     });
+                    return;
                 }
+
+                isLeaving = true;
+                markSaving();
             });
         </script>
         <?php include __DIR__ . '/../partials/sidebar-close.php'; ?>

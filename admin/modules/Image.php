@@ -15,6 +15,9 @@ class Image {
      * Upload de imagem
      */
     public static function upload($file, $userId, $metadata = []) {
+        $filepath = null;
+        $pdo = null;
+
         try {
             // Validar arquivo
             $validation = self::validateFile($file);
@@ -43,8 +46,12 @@ class Image {
                 return ['success' => false, 'message' => 'A pasta de uploads não tem permissão de escrita para o PHP'];
             }
 
+            $pdo = Database::getInstance()->getPDO();
+            $pdo->beginTransaction();
+
             // Mover arquivo
             if (!move_uploaded_file($file['tmp_name'], $filepath)) {
+                $pdo->rollBack();
                 return ['success' => false, 'message' => 'Erro ao fazer upload do arquivo'];
             }
 
@@ -56,14 +63,15 @@ class Image {
                 'title' => $metadata['title'] ?? pathinfo($file['name'], PATHINFO_FILENAME),
                 'filename' => $filename,
                 'filepath' => UPLOADS_URL . $filename,
-                'mime_type' => $file['type'],
-                'file_size' => $file['size'],
+                'mime_type' => $validation['mime_type'],
+                'file_size' => filesize($filepath),
                 'uploaded_by' => $userId,
                 'alt_text' => $metadata['alt_text'] ?? '',
                 'description' => $metadata['description'] ?? ''
             ];
 
             $imageId = Database::getInstance()->insert('images', $imageData);
+            $pdo->commit();
 
             return [
                 'success' => true, 
@@ -72,7 +80,15 @@ class Image {
                 'filepath' => $imageData['filepath'],
                 'filename' => $filename
             ];
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
+            if ($pdo && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            if ($filepath && is_file($filepath)) {
+                unlink($filepath);
+            }
+
             return ['success' => false, 'message' => 'Erro ao fazer upload: ' . $e->getMessage()];
         }
     }
@@ -108,7 +124,12 @@ class Image {
             return ['success' => false, 'message' => 'Extensão de arquivo não permitida'];
         }
 
-        return ['success' => true];
+        $imageInfo = @getimagesize($file['tmp_name']);
+        if (!$imageInfo || empty($imageInfo[0]) || empty($imageInfo[1])) {
+            return ['success' => false, 'message' => 'O arquivo não contém uma imagem válida'];
+        }
+
+        return ['success' => true, 'mime_type' => $mimeType];
     }
 
     /**

@@ -1,9 +1,13 @@
 <?php
 require_once __DIR__ . '/admin/modules/SiteItem.php';
+require_once __DIR__ . '/admin/modules/Post.php';
 
 $skills = SiteItem::getPublishedBySection('skill');
 $projects = SiteItem::getPublishedBySection('project');
-$blogHighlights = SiteItem::getPublishedBySection('blog', 3);
+$blogHighlights = Post::getList([
+    'status' => 'published',
+    'limit' => 3
+]);
 $siteBaseUrl = (((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && intval($_SERVER['SERVER_PORT']) === 443)) ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 $pageTitle = 'ChiapettaDev - Desenvolvedor Full Stack';
 $metaDescription = 'Portfólio e blog de Iago Filgueiras Chiapetta, com projetos, artigos sobre desenvolvimento web, Python e Linux.';
@@ -131,16 +135,14 @@ function link_target($url) {
             <div class="blog-grid">
                 <?php foreach ($blogHighlights as $post): ?>
                     <div class="blog-card">
-                        <?php if (!empty($post['image'])): ?>
-                            <a class="blog-card-image" href="<?= htmlspecialchars($post['primary_url'] ?: '#') ?>">
-                                <img src="<?= htmlspecialchars($post['image']) ?>" alt="<?= htmlspecialchars($post['title']) ?>" loading="lazy">
+                        <?php if (!empty($post['featured_image'])): ?>
+                            <a class="blog-card-image" href="/blog/<?= rawurlencode($post['slug']) ?>/">
+                                <img src="<?= htmlspecialchars($post['featured_image']) ?>" alt="<?= htmlspecialchars($post['title']) ?>" loading="lazy">
                             </a>
                         <?php endif; ?>
                         <h3><?= htmlspecialchars($post['title']) ?></h3>
-                        <p><?= htmlspecialchars($post['description']) ?></p>
-                        <?php if (!empty($post['primary_url'])): ?>
-                            <a href="<?= htmlspecialchars($post['primary_url']) ?>"><?= htmlspecialchars($post['primary_label'] ?: 'Ler artigo') ?> →</a>
-                        <?php endif; ?>
+                        <p><?= htmlspecialchars($post['excerpt'] ?: mb_substr(trim(strip_tags($post['content'])), 0, 170) . '…') ?></p>
+                        <a href="/blog/<?= rawurlencode($post['slug']) ?>/">Ler artigo →</a>
                     </div>
                 <?php endforeach; ?>
             </div>
