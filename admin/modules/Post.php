@@ -162,26 +162,43 @@ class Post {
      * Listar posts
      */
     public static function getList($filters = []) {
-        $where = "1=1";
+        $where = ['1=1'];
+        $params = [];
         
         if (!empty($filters['status'])) {
-            $where .= " AND status = '{$filters['status']}'";
+            $where[] = 'p.status = ?';
+            $params[] = (string) $filters['status'];
         }
 
         if (!empty($filters['author_id'])) {
-            $where .= " AND author_id = {$filters['author_id']}";
+            $where[] = 'p.author_id = ?';
+            $params[] = intval($filters['author_id']);
         }
 
         if (!empty($filters['search'])) {
-            $search = addslashes($filters['search']);
-            $where .= " AND (title LIKE '%$search%' OR content LIKE '%$search%')";
+            $search = '%' . trim((string) $filters['search']) . '%';
+            $where[] = '(p.title LIKE ? OR p.excerpt LIKE ? OR p.content LIKE ?
+                OR EXISTS (
+                    SELECT 1 FROM post_tags pt
+                    JOIN tags t ON t.id = pt.tag_id
+                    WHERE pt.post_id = p.id AND t.name LIKE ?
+                )
+                OR EXISTS (
+                    SELECT 1 FROM post_categories pc
+                    JOIN categories c ON c.id = pc.category_id
+                    WHERE pc.post_id = p.id AND c.name LIKE ?
+                ))';
+            array_push($params, $search, $search, $search, $search, $search);
         }
 
-        $orderLimit = !empty($filters['limit'])
-            ? "ORDER BY published_at DESC, created_at DESC LIMIT {$filters['limit']}"
-            : "ORDER BY published_at DESC, created_at DESC";
+        $sql = 'SELECT p.* FROM posts p WHERE ' . implode(' AND ', $where)
+            . ' ORDER BY p.published_at DESC, p.created_at DESC';
 
-        return Database::getInstance()->select('posts', $where, $orderLimit);
+        if (!empty($filters['limit'])) {
+            $sql .= ' LIMIT ' . max(1, intval($filters['limit']));
+        }
+
+        return Database::getInstance()->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**
@@ -362,9 +379,14 @@ class Post {
         }
 
         foreach ($categories as $categoryId) {
+            $categoryId = intval(trim((string) $categoryId));
+            if ($categoryId <= 0 || !Database::getInstance()->selectOne('categories', 'id = ?', [$categoryId])) {
+                continue;
+            }
+
             Database::getInstance()->insert('post_categories', [
                 'post_id' => $postId,
-                'category_id' => intval(trim($categoryId))
+                'category_id' => $categoryId
             ]);
         }
     }

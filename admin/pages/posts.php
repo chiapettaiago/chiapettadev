@@ -161,7 +161,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Determinar modo (listar ou editar)
 $editId = intval($_GET['edit'] ?? 0);
-$isNew = isset($_GET['new']);
+$requestedAutosaveToken = trim($_GET['autosave'] ?? '');
+if (!preg_match('/^[a-zA-Z0-9_-]{12,80}$/', $requestedAutosaveToken)) {
+    $requestedAutosaveToken = '';
+}
+$isNew = isset($_GET['new']) || $requestedAutosaveToken !== '';
 $post = null;
 
 if ($editId > 0) {
@@ -182,6 +186,28 @@ if (!$editId && !$isNew) {
     // Listar posts
     $filters = ['limit' => 50];
     $posts = Post::getList($filters);
+    $autosaveDrafts = [];
+
+    if (Database::getInstance()->tableExists('post_autosaves')) {
+        $autosaveRows = Database::getInstance()->query(
+            'SELECT draft_token, payload, updated_at FROM post_autosaves WHERE user_id = ? AND post_id IS NULL ORDER BY updated_at DESC',
+            [$user['id']]
+        )->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($autosaveRows as $autosaveRow) {
+            $autosavePayload = json_decode($autosaveRow['payload'] ?? '', true);
+            if (!is_array($autosavePayload)) {
+                continue;
+            }
+
+            $autosaveDrafts[] = [
+                'token' => $autosaveRow['draft_token'],
+                'title' => trim((string) ($autosavePayload['title'] ?? '')) ?: 'Rascunho sem título',
+                'slug' => trim((string) ($autosavePayload['slug'] ?? '')),
+                'updated_at' => $autosaveRow['updated_at']
+            ];
+        }
+    }
     ?>
     <!DOCTYPE html>
     <html lang="pt-BR">
@@ -414,7 +440,7 @@ if (!$editId && !$isNew) {
                 </div>
             <?php endif; ?>
 
-            <?php if (!empty($posts)): ?>
+            <?php if (!empty($posts) || !empty($autosaveDrafts)): ?>
                 <div class="table-responsive">
                     <table class="table">
                         <thead>
@@ -427,6 +453,26 @@ if (!$editId && !$isNew) {
                             </tr>
                         </thead>
                         <tbody>
+                            <?php foreach ($autosaveDrafts as $draft): ?>
+                                <tr>
+                                    <td>
+                                        <strong><?= htmlspecialchars($draft['title']) ?></strong><br>
+                                        <small style="color: var(--text-muted);">
+                                            <?= $draft['slug'] !== '' ? '/blog/' . htmlspecialchars($draft['slug']) . '/' : 'Ainda sem endereço definido' ?>
+                                        </small>
+                                    </td>
+                                    <td><span class="badge badge-draft">Rascunho automático</span></td>
+                                    <td><?= htmlspecialchars($user['full_name'] ?? $user['username']) ?></td>
+                                    <td><?= date('d/m/Y H:i', strtotime($draft['updated_at'])) ?></td>
+                                    <td>
+                                        <div class="action-buttons">
+                                            <a href="/admin/pages/posts.php?new=1&amp;autosave=<?= rawurlencode($draft['token']) ?>" class="btn-small btn-edit">
+                                                <i class="fas fa-pen"></i> Continuar editando
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
                             <?php foreach ($posts as $p): ?>
                                 <tr>
                                     <td>
@@ -437,7 +483,7 @@ if (!$editId && !$isNew) {
                                     </td>
                                     <td>
                                         <span class="badge badge-<?= $p['status'] ?>">
-                                            <?= ucfirst($p['status']) ?>
+                                            <?= $p['status'] === 'published' ? 'Publicado' : 'Rascunho' ?>
                                         </span>
                                     </td>
                                     <td>
@@ -958,7 +1004,7 @@ if (!$editId && !$isNew) {
             }
         </style>
         <link rel="stylesheet" href="/admin/assets/admin.css?v=20260516">
-        <link rel="stylesheet" href="/admin/assets/post-editor.css?v=20260805">
+        <link rel="stylesheet" href="/admin/assets/post-editor.css?v=20260805e">
 </head>
     <body>
     <?php include __DIR__ . '/../partials/sidebar.php'; ?>
@@ -1116,9 +1162,6 @@ if (!$editId && !$isNew) {
                                     >
                                 </div>
                                 <div class="wp-editor-actions-row">
-                                    <button type="button" class="btn-cancel post-save-draft" data-submit-status="draft">
-                                        <i class="fas fa-file"></i>Salvar rascunho
-                                    </button>
                                     <button type="submit" class="btn-submit" id="primarySubmitButton">
                                         <i class="fas fa-save"></i><span><?= $post ? 'Atualizar post' : 'Salvar rascunho' ?></span>
                                     </button>
@@ -1185,14 +1228,32 @@ if (!$editId && !$isNew) {
                         </summary>
                         <div class="wp-metabox-body">
                             <div class="form-group">
-                                <label for="categories">Selecione uma ou mais categorias</label>
-                                <select id="categories" name="categories" multiple style="min-height: 140px;">
-                                    <?php foreach ($categories as $cat): ?>
-                                        <option value="<?= $cat['id'] ?>" <?= ($post && array_any($post['categories'] ?? [], fn($c) => $c['id'] == $cat['id'])) ? 'selected' : '' ?>>
-                                            <?= htmlspecialchars($cat['name']) ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
+                                <div class="post-category-heading">
+                                    <span>Selecione uma ou mais categorias</span>
+                                    <a href="/admin/pages/categories.php" target="_blank" rel="noopener">
+                                        <i class="fas fa-gear"></i> Gerenciar
+                                    </a>
+                                </div>
+                                <?php if (!empty($categories)): ?>
+                                    <div class="post-category-picker" id="categories">
+                                        <?php foreach ($categories as $cat): ?>
+                                            <label class="post-category-option">
+                                                <input
+                                                    type="checkbox"
+                                                    name="categories[]"
+                                                    value="<?= intval($cat['id']) ?>"
+                                                    <?= ($post && array_any($post['categories'] ?? [], fn($c) => $c['id'] == $cat['id'])) ? 'checked' : '' ?>
+                                                >
+                                                <span><?= htmlspecialchars($cat['name']) ?></span>
+                                            </label>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php else: ?>
+                                    <div class="post-category-empty">
+                                        Nenhuma categoria criada.
+                                        <a href="/admin/pages/categories.php">Criar a primeira categoria</a>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                         </div>
                     </details>
@@ -1200,7 +1261,6 @@ if (!$editId && !$isNew) {
             </div>
 
             <div class="post-mobile-actions" aria-label="Ações de publicação">
-                <button type="button" class="btn-cancel post-save-draft" data-submit-status="draft"><i class="fas fa-file"></i>Rascunho</button>
                 <button type="submit" class="btn-submit post-mobile-primary"><i class="fas fa-save"></i><span>Salvar</span></button>
             </div>
 
@@ -1301,6 +1361,7 @@ if (!$editId && !$isNew) {
             const restoreAutosaveButton = document.getElementById('restoreAutosave');
             const discardAutosaveButton = document.getElementById('discardAutosave');
             const postId = <?= intval($post['id'] ?? 0) ?>;
+            const requestedAutosaveToken = <?= json_encode($requestedAutosaveToken, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
             const serverUpdatedAt = <?= json_encode($post['updated_at'] ?? $post['created_at'] ?? null) ?>;
             const newPostTokenKey = 'cms-new-post-autosave-token-<?= intval($user['id']) ?>';
             let pendingLibraryImage = featuredImageField.value;
@@ -1479,8 +1540,16 @@ if (!$editId && !$isNew) {
                     return `post_${postId}_<?= intval($user['id']) ?>_autosave`;
                 }
 
+                if (requestedAutosaveToken) {
+                    localStorage.setItem(newPostTokenKey, requestedAutosaveToken);
+                    return requestedAutosaveToken;
+                }
+
                 let token = localStorage.getItem(newPostTokenKey);
-                if (!token) {
+                const validToken = typeof token === 'string'
+                    && /^[a-zA-Z0-9_-]{12,80}$/.test(token);
+
+                if (!validToken) {
                     const randomPart = window.crypto && window.crypto.randomUUID
                         ? window.crypto.randomUUID().replace(/-/g, '')
                         : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -1505,8 +1574,26 @@ if (!$editId && !$isNew) {
                     published_at: document.getElementById('published_at').value,
                     featured_image: featuredImageField.value,
                     tags: document.getElementById('tags').value,
-                    categories: Array.from(document.getElementById('categories').selectedOptions).map(option => option.value)
+                    categories: Array.from(document.querySelectorAll('input[name="categories[]"]:checked')).map(input => input.value)
                 };
+            }
+
+            function encodeAutosavePayload(payload) {
+                const json = JSON.stringify(payload);
+
+                if (typeof TextEncoder !== 'undefined') {
+                    const bytes = new TextEncoder().encode(json);
+                    let binary = '';
+                    const chunkSize = 8192;
+
+                    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+                        binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+                    }
+
+                    return btoa(binary);
+                }
+
+                return btoa(unescape(encodeURIComponent(json)));
             }
 
             function scheduleAutosave() {
@@ -1521,23 +1608,33 @@ if (!$editId && !$isNew) {
                 if (autosaveRequest) {
                     autosaveRequest.abort();
                 }
-                autosaveRequest = new AbortController();
+                const requestController = new AbortController();
+                autosaveRequest = requestController;
                 saveState.classList.add('is-dirty');
                 saveState.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando automaticamente…';
 
                 const body = new FormData();
                 body.append('token', autosaveTokenField.value);
                 body.append('post_id', String(postId));
-                body.append('payload', JSON.stringify(collectAutosavePayload()));
+                body.append('payload_encoding', 'base64');
+                body.append('payload', encodeAutosavePayload(collectAutosavePayload()));
 
                 try {
                     const response = await fetch('/admin/ajax/post-autosave.php', {
                         method: 'POST',
                         body,
                         credentials: 'same-origin',
-                        signal: autosaveRequest.signal
+                        signal: requestController.signal
                     });
-                    const result = await response.json();
+                    const responseText = await response.text();
+                    let result = null;
+
+                    try {
+                        result = JSON.parse(responseText);
+                    } catch (parseError) {
+                        throw new Error('O servidor retornou uma resposta inválida');
+                    }
+
                     if (!response.ok || !result.success) {
                         throw new Error(result.message || 'Falha no autosave');
                     }
@@ -1548,16 +1645,19 @@ if (!$editId && !$isNew) {
                 } catch (error) {
                     if (error.name === 'AbortError') return;
                     saveState.classList.add('is-dirty');
+                    const errorMessage = escapeHtml(error.message || 'Não foi possível salvar');
                     saveState.innerHTML = navigator.onLine
-                        ? '<i class="fas fa-triangle-exclamation"></i> Não foi possível salvar'
+                        ? `<i class="fas fa-triangle-exclamation"></i> ${errorMessage}`
                         : '<i class="fas fa-wifi"></i> Sem conexão — tentando novamente';
                     scheduleAutosave();
                 } finally {
-                    autosaveRequest = null;
+                    if (autosaveRequest === requestController) {
+                        autosaveRequest = null;
+                    }
                 }
             }
 
-            function applyRecoveredPayload(payload) {
+            function applyRecoveredPayload(payload, shouldMarkDirty = true) {
                 if (!payload) return;
                 titleField.value = payload.title || '';
                 slugField.value = payload.slug || '';
@@ -1569,8 +1669,8 @@ if (!$editId && !$isNew) {
                 document.getElementById('tags').value = payload.tags || '';
 
                 const selectedCategories = new Set((payload.categories || []).map(String));
-                Array.from(document.getElementById('categories').options).forEach(option => {
-                    option.selected = selectedCategories.has(option.value);
+                document.querySelectorAll('input[name="categories[]"]').forEach(input => {
+                    input.checked = selectedCategories.has(input.value);
                 });
 
                 const editor = typeof tinymce !== 'undefined' ? tinymce.get('content') : null;
@@ -1581,7 +1681,13 @@ if (!$editId && !$isNew) {
                 updateContentMetrics(contentField.value.replace(/<[^>]*>/g, ' '));
                 updatePublishControls();
                 recoveryBanner.hidden = true;
-                markFormDirty();
+                if (shouldMarkDirty) {
+                    markFormDirty();
+                } else {
+                    formDirty = false;
+                    saveState.classList.remove('is-dirty');
+                    saveState.innerHTML = '<i class="fas fa-cloud-check"></i> Rascunho automático carregado';
+                }
             }
 
             async function discardAutosave() {
@@ -1601,8 +1707,16 @@ if (!$editId && !$isNew) {
                     const result = await response.json();
                     if (!result.success || !result.autosave || !result.autosave.payload) return;
 
-                    const autosaveTime = Date.parse(result.autosave.updated_at.replace(' ', 'T') + 'Z');
-                    const serverTime = serverUpdatedAt ? Date.parse(serverUpdatedAt.replace(' ', 'T') + 'Z') : 0;
+                    const autosaveTime = Date.parse(result.autosave.updated_at.replace(' ', 'T') + '-03:00');
+                    const serverTime = serverUpdatedAt
+                        ? Date.parse(serverUpdatedAt.replace(' ', 'T') + '-03:00')
+                        : 0;
+                    if (requestedAutosaveToken && postId === 0) {
+                        recoveredPayload = result.autosave.payload;
+                        applyRecoveredPayload(recoveredPayload, false);
+                        return;
+                    }
+
                     if (postId === 0 || autosaveTime > serverTime) {
                         recoveredPayload = result.autosave.payload;
                         recoveryBanner.hidden = false;
@@ -1764,14 +1878,6 @@ if (!$editId && !$isNew) {
                 }
             });
 
-            document.querySelectorAll('[data-submit-status]').forEach(button => {
-                button.addEventListener('click', function() {
-                    statusField.value = button.dataset.submitStatus || 'draft';
-                    updatePublishControls();
-                    postForm.requestSubmit(primarySubmitButton);
-                });
-            });
-
             if (mediaSearch) {
                 mediaSearch.addEventListener('input', function() {
                     const query = mediaSearch.value.trim().toLocaleLowerCase('pt-BR');
@@ -1816,6 +1922,11 @@ if (!$editId && !$isNew) {
 
             postForm.addEventListener('submit', function(event) {
                 window.clearTimeout(autosaveTimer);
+                if (autosaveRequest) {
+                    autosaveRequest.abort();
+                    autosaveRequest = null;
+                }
+
                 if (submittingAfterUpload) {
                     isLeaving = true;
                     markSaving();

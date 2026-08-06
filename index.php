@@ -32,7 +32,7 @@ function link_target($url) {
 <?php include 'templates/header.php'; ?>
 <?php require 'functions/conn.php'?>
 
-<main id="primary" class="py-5">
+<main id="primary">
     <!-- Hero Section -->
     <section class="hero" id="home">
         <div class="container text-center">

@@ -3,10 +3,13 @@
  * Configuracao do Banco de Dados - CMS ChiapettaDev
  */
 
+define('APP_TIMEZONE', 'America/Sao_Paulo');
+date_default_timezone_set(APP_TIMEZONE);
+
 define('DB_TYPE', 'mysql');
-define('DB_HOST', '159.203.188.0');
+define('DB_HOST', '163.176.216.89');
 define('DB_USER', 'chiapettadev');
-define('DB_PASS', 'tZ3enMSb53NDCrtB');
+define('DB_PASS', 'FAsTHE2crh4DEc2T');
 define('DB_NAME', 'chiapettadev');
 
 define('ADMIN_PATH', '/admin/');
@@ -35,6 +38,8 @@ class Database {
                     PDO::ATTR_EMULATE_PREPARES => false
                 ]
             );
+            // DATETIME e CURRENT_TIMESTAMP devem seguir o mesmo horário do CMS.
+            $this->pdo->exec("SET time_zone = '-03:00'");
         } catch (PDOException $e) {
             die('Erro de conexao com banco de dados: ' . $e->getMessage());
         }

@@ -108,6 +108,19 @@ function blog_post_excerpt($text, $length = 160) {
 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>
 </script>
 
+<div
+    class="reading-progress"
+    id="readingProgress"
+    role="progressbar"
+    aria-label="Progresso de leitura"
+    aria-valuemin="0"
+    aria-valuemax="100"
+    aria-valuenow="0"
+    aria-valuetext="100% da leitura restante"
+>
+    <span class="reading-progress-fill" id="readingProgressFill"></span>
+</div>
+
 <main id="primary" class="py-5 blog-post-page">
     <section class="blog-post-hero" style="border-top: none;">
         <div class="container">
@@ -169,6 +182,30 @@ function blog_post_excerpt($text, $length = 160) {
 </main>
 
 <style>
+    .reading-progress {
+        position: fixed;
+        top: 0;
+        right: 0;
+        left: 0;
+        z-index: 1100;
+        height: 5px;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.12);
+        pointer-events: none;
+    }
+
+    .reading-progress-fill {
+        display: block;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, var(--accent), #64d2ff);
+        box-shadow: 0 0 12px rgba(0, 217, 163, 0.55);
+        transform: scaleX(0);
+        transform-origin: left center;
+        transition: transform 0.1s linear;
+        will-change: transform;
+    }
+
     .blog-post-page {
         background: radial-gradient(circle at top left, rgba(0, 217, 163, 0.08), transparent 24rem);
     }
@@ -250,10 +287,62 @@ function blog_post_excerpt($text, $length = 160) {
     }
 
     @media (max-width: 768px) {
+        .reading-progress {
+            height: 4px;
+        }
+
         .blog-post-meta {
             gap: 0.75rem 1rem;
         }
     }
+
+    @media (prefers-reduced-motion: reduce) {
+        .reading-progress-fill {
+            transition: none;
+        }
+    }
 </style>
+
+<script>
+    (function () {
+        const progress = document.getElementById('readingProgress');
+        const fill = document.getElementById('readingProgressFill');
+        const article = document.querySelector('.blog-post-body');
+
+        if (!progress || !fill || !article) return;
+
+        let frameRequested = false;
+
+        function updateReadingProgress() {
+            frameRequested = false;
+
+            const articleTop = article.getBoundingClientRect().top + window.scrollY;
+            const articleHeight = Math.max(article.offsetHeight, 1);
+            const readingPosition = window.scrollY + (window.innerHeight * 0.28);
+            const percentage = Math.min(100, Math.max(0, ((readingPosition - articleTop) / articleHeight) * 100));
+            const roundedPercentage = Math.round(percentage);
+            const remaining = Math.max(0, 100 - roundedPercentage);
+
+            fill.style.transform = `scaleX(${percentage / 100})`;
+            progress.setAttribute('aria-valuenow', String(roundedPercentage));
+            progress.setAttribute('aria-valuetext', `${remaining}% da leitura restante`);
+        }
+
+        function requestProgressUpdate() {
+            if (frameRequested) return;
+            frameRequested = true;
+            window.requestAnimationFrame(updateReadingProgress);
+        }
+
+        window.addEventListener('scroll', requestProgressUpdate, { passive: true });
+        window.addEventListener('resize', requestProgressUpdate);
+
+        if ('ResizeObserver' in window) {
+            new ResizeObserver(requestProgressUpdate).observe(article);
+        }
+
+        updateReadingProgress();
+    }());
+</script>
 
 <?php include __DIR__ . '/footer.php'; ?>

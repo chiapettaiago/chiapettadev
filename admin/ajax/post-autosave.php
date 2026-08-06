@@ -79,7 +79,18 @@ if ($postId > 0) {
     }
 }
 
-$payload = json_decode($_POST['payload'] ?? '', true);
+$rawPayload = (string) ($_POST['payload'] ?? '');
+if (($_POST['payload_encoding'] ?? '') === 'base64') {
+    $decodedPayload = base64_decode($rawPayload, true);
+    if ($decodedPayload === false) {
+        http_response_code(422);
+        echo json_encode(['success' => false, 'message' => 'Codificação do rascunho inválida']);
+        exit;
+    }
+    $rawPayload = $decodedPayload;
+}
+
+$payload = json_decode($rawPayload, true);
 if (!is_array($payload)) {
     http_response_code(422);
     echo json_encode(['success' => false, 'message' => 'Conteúdo do rascunho inválido']);
@@ -103,10 +114,20 @@ if ($encodedPayload === false || strlen($encodedPayload) > 4000000) {
     exit;
 }
 
-$stmt = $pdo->prepare("INSERT INTO post_autosaves (user_id, post_id, draft_token, payload)
-    VALUES (?, NULLIF(?, 0), ?, ?)
-    ON DUPLICATE KEY UPDATE post_id = VALUES(post_id), payload = VALUES(payload), updated_at = CURRENT_TIMESTAMP");
-$stmt->execute([$user['id'], $postId, $token, $encodedPayload]);
+try {
+    $stmt = $pdo->prepare("INSERT INTO post_autosaves (user_id, post_id, draft_token, payload)
+        VALUES (?, NULLIF(?, 0), ?, ?)
+        ON DUPLICATE KEY UPDATE post_id = VALUES(post_id), payload = VALUES(payload), updated_at = CURRENT_TIMESTAMP");
+    $stmt->execute([$user['id'], $postId, $token, $encodedPayload]);
+} catch (Throwable $error) {
+    error_log('Falha ao salvar autosave de post: ' . $error->getMessage());
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Não foi possível gravar o rascunho no servidor'
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
 
 echo json_encode([
     'success' => true,

@@ -79,7 +79,7 @@ $adminMenu = [
         'label' => 'Posts',
         'icon' => 'fas fa-pen-to-square',
         'href' => '/admin/pages/posts.php',
-        'match' => ['/admin/pages/posts.php'],
+        'match' => ['/admin/pages/posts.php', '/admin/pages/categories.php'],
         'children' => [
             [
                 'label' => 'Todos os posts',
@@ -94,6 +94,12 @@ $adminMenu = [
                 'href' => '/admin/pages/posts.php?new=1',
                 'match' => ['/admin/pages/posts.php'],
                 'query' => ['new' => '1'],
+            ],
+            [
+                'label' => 'Categorias',
+                'icon' => 'fas fa-folder-tree',
+                'href' => '/admin/pages/categories.php',
+                'match' => ['/admin/pages/categories.php'],
             ],
         ],
     ],
@@ -204,6 +210,78 @@ $adminMenu = [
 ];
 ?>
 <?php $toolbarInitial = cms_toolbar_initial($toolbarUser); ?>
+<link rel="stylesheet" href="/admin/assets/admin.css?v=20260805e">
+<style id="adminMobileNavigationCritical">
+@media (max-width: 768px) {
+    html,
+    body {
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow-x: clip !important;
+    }
+
+    .admin-mobile-bottom-nav {
+        position: fixed !important;
+        top: auto !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        height: calc(var(--cms-mobile-nav-height, 72px) + env(safe-area-inset-bottom)) !important;
+        min-height: 0 !important;
+        max-height: calc(var(--cms-mobile-nav-height, 72px) + env(safe-area-inset-bottom)) !important;
+        margin: 0 !important;
+        padding: 0.38rem max(0.35rem, env(safe-area-inset-right)) calc(0.38rem + env(safe-area-inset-bottom)) max(0.35rem, env(safe-area-inset-left)) !important;
+        box-sizing: border-box !important;
+        z-index: 2147483646 !important;
+        display: grid !important;
+        grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+        grid-template-rows: minmax(0, 1fr) !important;
+        align-items: stretch !important;
+        overflow: visible !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        transform: none !important;
+        pointer-events: auto !important;
+    }
+
+    .admin-mobile-bottom-nav > a,
+    .admin-mobile-bottom-nav > button {
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        height: 100% !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        box-sizing: border-box !important;
+    }
+
+    .admin-main,
+    body.admin-sidebar-collapsed .admin-main {
+        min-width: 0 !important;
+        overflow-x: clip !important;
+    }
+
+    .admin-mobile-menu-overlay {
+        bottom: calc(var(--cms-mobile-nav-height, 72px) + env(safe-area-inset-bottom)) !important;
+        z-index: 2147483000 !important;
+    }
+
+    .admin-toolbar,
+    .admin-sidebar {
+        display: none !important;
+    }
+}
+
+@media (min-width: 769px) {
+    .admin-mobile-bottom-nav,
+    .admin-mobile-menu-overlay {
+        display: none !important;
+    }
+}
+</style>
 <header class="admin-toolbar" role="banner">
     <div class="admin-toolbar-left">
         <a href="/admin/dashboard.php" class="admin-toolbar-brand" aria-label="Ir para o painel">
@@ -283,9 +361,153 @@ $adminMenu = [
     </div>
 </aside>
 
+<?php
+$mobileMoreActive = !in_array($currentPath, [
+    '/admin/',
+    '/admin/dashboard.php',
+    '/admin/pages/posts.php',
+    '/admin/pages/images.php'
+], true);
+?>
+<nav class="admin-mobile-bottom-nav" aria-label="Navegação administrativa móvel">
+    <a href="/admin/dashboard.php" class="<?= in_array($currentPath, ['/admin/', '/admin/dashboard.php'], true) ? 'active' : '' ?>">
+        <i class="fas fa-gauge-high"></i>
+        <span>Painel</span>
+    </a>
+    <a href="/admin/pages/posts.php" class="<?= $currentPath === '/admin/pages/posts.php' && !isset($currentQuery['new']) ? 'active' : '' ?>">
+        <i class="fas fa-pen-to-square"></i>
+        <span>Posts</span>
+    </a>
+    <a href="/admin/pages/posts.php?new=1" class="admin-mobile-create <?= $currentPath === '/admin/pages/posts.php' && (($currentQuery['new'] ?? '') === '1') ? 'active' : '' ?>">
+        <i class="fas fa-plus"></i>
+        <span>Novo</span>
+    </a>
+    <a href="/admin/pages/images.php" class="<?= $currentPath === '/admin/pages/images.php' ? 'active' : '' ?>">
+        <i class="fas fa-images"></i>
+        <span>Mídia</span>
+    </a>
+    <button type="button" id="adminMobileMoreButton" class="<?= $mobileMoreActive ? 'active' : '' ?>" aria-expanded="false" aria-controls="adminMobileMenuSheet">
+        <i class="fas fa-grip"></i>
+        <span>Mais</span>
+    </button>
+</nav>
+
+<div class="admin-mobile-menu-overlay" id="adminMobileMenuOverlay" hidden>
+    <section class="admin-mobile-menu-sheet" id="adminMobileMenuSheet" role="dialog" aria-modal="true" aria-labelledby="adminMobileMenuTitle">
+        <header>
+            <div>
+                <span class="admin-mobile-sheet-kicker">ChiapettaDev</span>
+                <h2 id="adminMobileMenuTitle">Todas as opções</h2>
+            </div>
+            <button type="button" class="admin-mobile-sheet-close" id="adminMobileMenuClose" aria-label="Fechar menu">
+                <i class="fas fa-times"></i>
+            </button>
+        </header>
+
+        <div class="admin-mobile-sheet-content">
+            <ul class="admin-mobile-all-menu">
+                <?php foreach ($adminMenu as $item): ?>
+                    <?php $groupActive = cms_menu_group_active($currentPath, $currentQuery, $item); ?>
+                    <li class="<?= $groupActive ? 'active' : '' ?>">
+                        <a href="<?= htmlspecialchars($item['href']) ?>">
+                            <span class="admin-mobile-menu-icon"><i class="<?= htmlspecialchars($item['icon']) ?>"></i></span>
+                            <span><?= htmlspecialchars($item['label']) ?></span>
+                            <i class="fas fa-chevron-right"></i>
+                        </a>
+                        <?php if (!empty($item['children'])): ?>
+                            <ul>
+                                <?php foreach ($item['children'] as $child): ?>
+                                    <li>
+                                        <a href="<?= htmlspecialchars($child['href']) ?>" class="<?= cms_menu_item_active($currentPath, $currentQuery, $child) ? 'active' : '' ?>">
+                                            <i class="<?= htmlspecialchars($child['icon']) ?>"></i>
+                                            <span><?= htmlspecialchars($child['label']) ?></span>
+                                        </a>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        <?php endif; ?>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+
+        <footer>
+            <a href="/" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square"></i>Ver site</a>
+            <a href="/admin/logout.php" class="admin-mobile-logout"><i class="fas fa-right-from-bracket"></i>Sair</a>
+        </footer>
+    </section>
+</div>
+
 <main class="admin-main">
 <script>
 (function () {
     document.body.classList.add('admin-sidebar-collapsed');
+
+    const desktopSidebar = document.querySelector('.admin-sidebar');
+    const desktopToolbar = document.querySelector('.admin-toolbar');
+    const mobileBottomNav = document.querySelector('.admin-mobile-bottom-nav');
+    const moreButton = document.getElementById('adminMobileMoreButton');
+    const overlay = document.getElementById('adminMobileMenuOverlay');
+    const closeButton = document.getElementById('adminMobileMenuClose');
+
+    function syncAuthenticatedMobileLayout() {
+        const isMobile = window.matchMedia('(max-width: 768px)').matches;
+        [desktopSidebar, desktopToolbar].forEach(function (element) {
+            if (!element) return;
+            if (isMobile) {
+                element.setAttribute('aria-hidden', 'true');
+                element.style.setProperty('display', 'none', 'important');
+            } else {
+                element.removeAttribute('aria-hidden');
+                element.style.removeProperty('display');
+            }
+        });
+
+        if (mobileBottomNav) {
+            if (isMobile) {
+                mobileBottomNav.removeAttribute('aria-hidden');
+                mobileBottomNav.style.setProperty('display', 'grid', 'important');
+                mobileBottomNav.style.setProperty('position', 'fixed', 'important');
+                mobileBottomNav.style.setProperty('bottom', '0', 'important');
+                mobileBottomNav.style.setProperty('visibility', 'visible', 'important');
+                mobileBottomNav.style.setProperty('opacity', '1', 'important');
+            } else {
+                mobileBottomNav.setAttribute('aria-hidden', 'true');
+                mobileBottomNav.style.setProperty('display', 'none', 'important');
+            }
+        }
+
+        if (!isMobile && !overlay.hidden) closeMobileMenu();
+    }
+
+    function openMobileMenu() {
+        overlay.hidden = false;
+        requestAnimationFrame(function () {
+            overlay.classList.add('active');
+            document.body.classList.add('admin-mobile-menu-open');
+            moreButton.setAttribute('aria-expanded', 'true');
+            closeButton.focus();
+        });
+    }
+
+    function closeMobileMenu() {
+        overlay.classList.remove('active');
+        document.body.classList.remove('admin-mobile-menu-open');
+        moreButton.setAttribute('aria-expanded', 'false');
+        window.setTimeout(function () {
+            overlay.hidden = true;
+        }, 220);
+    }
+
+    moreButton.addEventListener('click', openMobileMenu);
+    closeButton.addEventListener('click', closeMobileMenu);
+    overlay.addEventListener('click', function (event) {
+        if (event.target === overlay) closeMobileMenu();
+    });
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && !overlay.hidden) closeMobileMenu();
+    });
+    window.addEventListener('resize', syncAuthenticatedMobileLayout, { passive: true });
+    syncAuthenticatedMobileLayout();
 })();
 </script>
